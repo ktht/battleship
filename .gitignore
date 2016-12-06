@@ -2,3 +2,5 @@
 *.pyc
 testing.py
 testing2.py
+tasks.py
+server.py
