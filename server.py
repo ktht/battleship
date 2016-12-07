@@ -1,30 +1,34 @@
 import time, itertools, random, pika, threading, game
 import numpy as np
 
+SERVER_NAME = 'Kiang_Tan_Ooi'
+
 is_running = True
 
 connection = pika.BlockingConnection(pika.ConnectionParameters(
         host='localhost'))
 channel = connection.channel()
 
-channel.exchange_declare(exchange='server1_bcast',
+channel.exchange_declare(exchange=SERVER_NAME,
                          type='fanout')
 channel.exchange_declare(exchange='announcements',
-                         type='fanout', arguments={'x-message-ttl' : 900})
+                         type='fanout', arguments={'x-message-ttl' : 5000})
 channel.queue_declare(queue='rpc_queue')
 
 def send_announcements():
+    i = 0
     while is_running:
-        time.sleep(1)
+        i +=1
+        time.sleep(5)
+        msg = SERVER_NAME+':'+str(len(game.players))
         channel.basic_publish(exchange='announcements',
                               routing_key='',
-                              body="Sending server announcements!")
-
+                              body=msg)
 
 def send_broadcasts():
     while is_running:
         time.sleep(1)
-        channel.basic_publish(exchange='server1_bcast',
+        channel.basic_publish(exchange=SERVER_NAME,
                             routing_key='',
                             body="Sending server broadcast!")
 
