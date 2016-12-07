@@ -1,14 +1,8 @@
-import time, itertools, random, pika
+import time, itertools, random, pika, threading
 from os import system, name
 from string import ascii_uppercase
 import numpy as np
 
-connection = pika.BlockingConnection(pika.ConnectionParameters(
-        host='localhost'))
-
-channel = connection.channel()
-
-channel.queue_declare(queue='rpc_queue')
 
 # Global Constants  -------------------------------------------------------------------
 BOARD_WIDTH = 10
@@ -29,35 +23,6 @@ ships = {"Carrier": [5, CARRIER_MARK],
 
 class BattleShips(object):
     players = []
-
-    def __init__(self):
-        print('Yellow!')
-
-
-        #self.board = Board('0') # Board to print out
-        #self.create_player("Guy")
-        #self.main_board = self.create_board(NO_SHIPS_MARK)
-        #firstpl = self.players[0]
-
-        #self.populate_board()
-
-        #self.main_board.print_board()
-        #try:
-        #    firstpl.board_ships.ship_placement(ships['Submarine'],1,1,'h')
-        #    firstpl.board_ships.ship_placement(ships['Carrier'], 9, 9, 'v')
-
-        #self.main_board.ship_placement(ships['Carrier'], firstpl.id)
-
-        #except IndexError as err:
-        #    print(err)
-
-        #for ship, val1 in ships_dict.iteritems():
-        #    print(ship, val1)
-        #f = array.tostring()
-        #np.fromstring(f, dtype=int).reshape(4,4)
-
-        #system('cls' if name == 'nt' else 'clear')
-
 
     def create_player(self, name):
         if len(self.players) < 10:
@@ -161,26 +126,6 @@ class Board(object):
 class Score(object):
     pass
 
-
-def on_request(ch, method, props, body):
-    n = int(body)
-
-    if n == 1:
-        game.create_player('Peeter')
-        print(game.players[0].get_admin())
-
-
-    print("Body is: (%s)" % n)
-    response = 125
-
-    ch.basic_publish(exchange='',
-                     routing_key=props.reply_to,
-                     properties=pika.BasicProperties(correlation_id = \
-                                                         props.correlation_id),
-                     body=str(response))
-    ch.basic_ack(delivery_tag = method.delivery_tag)
-
-
 if __name__ == '__main__':
     game = BattleShips()
 
@@ -188,15 +133,12 @@ if __name__ == '__main__':
     #channel.basic_qos(prefetch_count=1)
     #channel.basic_consume(on_request, queue='rpc_queue')
 
-    print(" [x] Awaiting RPC requests")
+    #print(" [x] Awaiting RPC requests")
     #channel.start_consuming()
-
     game.create_player('Karl')
     game.create_player('Pepe')
     game.create_player('Mohammad')
-    game.create_player('Pepe')
     board = game.create_board()
-
     game.populate_board(board)
     board.print_board()
 
@@ -204,6 +146,7 @@ if __name__ == '__main__':
     #board_shape = board_array.shape
     #f = board_array.tostring()
     #print(np.fromstring(f, dtype=int).reshape(board_shape))
+    # system('cls' if name == 'nt' else 'clear')
 
     #print(board_array.shape)
     #board.print_board()
