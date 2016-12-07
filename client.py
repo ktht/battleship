@@ -1,13 +1,15 @@
-import pika, os, logging, sys, uuid, threading, time
+import pika, os, logging, sys, uuid, threading, time, Queue
 from os import system, name
 logging.basicConfig()
 
-GAME_SERVER_NAME = 'Kiang_Tan_Ooi'
+GAME_SERVER_NAME = 'Server'
 
 global_bool = False
 initialization_phase = True
 is_alive = True
 counter = 0
+queue = Queue.Queue()
+cv = threading.Condition()
 
 def testing():
     connection.add_timeout(5, testing)
@@ -35,17 +37,7 @@ def setup():
                           queue=queue_name,
                           no_ack=True)
 
-    channel2.exchange_declare(exchange=GAME_SERVER_NAME,
-                              type='fanout')
 
-    result2 = channel2.queue_declare(exclusive=True)
-    queue_name2 = result2.method.queue
-
-    channel2.queue_bind(exchange=GAME_SERVER_NAME,
-                        queue=queue_name2)
-    channel2.basic_consume(server_bcasts_callback,
-                           queue=queue_name2,
-                           no_ack=True)
 
 
 class TimedSet(set): # http://stackoverflow.com/questions/16136979/set-class-with-timed-auto-remove-of-elements
@@ -67,12 +59,37 @@ def listen_public_announcements():
     #print(' [*] Announcements started listening. To exit press CTRL+C')
     print('Getting list of available servers, please wait...')
     print('If no servers are seen after 10 seconds, then no server is available.')
-    channel.start_consuming()
+    try:
+        channel.start_consuming()
+    except KeyboardInterrupt:
+        channel.stop_consuming()
+    #channel.start_consuming()
 
 
 def listen_server_bcasts():
+    server_name = raw_input('\nEnter the name of the server you want to connect to: \n')
+
+
+    # TODO check if this name matches any names in the set
+    channel2.exchange_declare(exchange=server_name,
+                              type='fanout')
+
+    result2 = channel2.queue_declare(exclusive=True)
+    queue_name2 = result2.method.queue
+
+    channel2.queue_bind(exchange=server_name,
+                        queue=queue_name2)
+    channel2.basic_consume(server_bcasts_callback,
+                           queue=queue_name2,
+                           no_ack=True)
+    system('cls' if name == 'nt' else 'clear')
     print(' [*] Broadcasts started listening. To exit press CTRL+C')
-    channel2.start_consuming()
+
+    try:
+        channel2.start_consuming()
+    except KeyboardInterrupt:
+        channel2.stop_consuming()
+    #channel2.start_consuming()
 
 
 def public_announc_callback(ch, method, properties, body):
@@ -96,8 +113,11 @@ def public_announc_callback(ch, method, properties, body):
                 connection.close()
 
 def server_bcasts_callback(ch, method, properties, body):
-    global global_bool
-    global_bool = True
+    cv.acquire()
+    queue.put(body)
+    cv.notify_all()
+    cv.release()
+
     #print(" [x] %r" % body)
 
 
@@ -134,30 +154,55 @@ class RpcClient(object):
 
 
 def do_rpc():
-    response = rpc_client.call(1)
-    print("Got a response: %r" % response)
+    while is_alive:
+        cv.acquire()
+        if queue.qsize() == 0:
+            cv.wait()
+        try:
+            msg = queue.get(0)
+            print("This got put into the queue: " + str(msg))
+
+        except Queue.Empty:
+            pass
+        cv.release()
+
+
+#    while(is_alive):
+#        cv.acquire()
+#        if queue_send2srvr.qsize() == 0:
+#            cv.wait()
+    #response = rpc_client.call(1)
+    #print("Got a response: %r" % response)
 
 
 if __name__ == '__main__':
     rpc_client = RpcClient()
     t_set = TimedSet()
     setup()
+
     threads = []
+    get_servers_list = threading.Thread(target=listen_public_announcements, name='Listen_Public_Announc')
     t1 = threading.Thread(target=listen_server_bcasts, name='Listen_Server_Bcasts')
     t2 = threading.Thread(target=do_rpc, name='RPC_Handling')
-    t3 = threading.Thread(target=listen_public_announcements, name='Listen_Public_Announc')
-    threads.extend((t1, t2, t3))
-    #t.setDaemon(True)
-    #t1.start()
-    t3.setDaemon(True)
-    t3.start()
-    t3.join()
 
-    #print('\n t3 started')
-    print("On top of while loop")
+    threads.extend((t1, t2, get_servers_list))
+
+    get_servers_list.setDaemon(True)
+    get_servers_list.start()
+    get_servers_list.join()
+
+    t1.setDaemon(True)
+    t2.setDaemon(True)
+    t2.start()
+    t1.start()
     while not global_bool:
         time.sleep(0.2)
     print('Exited while loop')
+    t1.join()
+    t2.join()
+
+    #print('\n t3 started')
+
 
     #print('Got bool!')
 
@@ -167,3 +212,4 @@ if __name__ == '__main__':
 
     #t2.start()
     #t3.join()
+

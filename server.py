@@ -1,7 +1,7 @@
 import time, itertools, random, pika, threading, game
 import numpy as np
 
-SERVER_NAME = 'Kiang_Tan_Ooi'
+SERVER_NAME = 'Server'
 
 is_running = True
 
@@ -37,9 +37,11 @@ def on_request(ch, method, props, body):
     n = int(body)
 
     if n == 1:
+        id = game.create_player('Pepe')
+
         # game.create_player('Peeter')
         # print(game.players[0].get_admin())
-        print('Yay, it worked!!!')
+        print('Created player with id: '+str(id))
 
     print("Body is: (%s)" % n)
     response = 125

@@ -26,9 +26,11 @@ class BattleShips(object):
 
     def create_player(self, name):
         if len(self.players) < 10:
-            self.players.append(Player(name))
+            self.new_player = Player(name)
+            self.players.append(self.new_player)
         else:
             print("Maximum number of players exceeded!")
+        return self.new_player.get_id()
 
     def create_board(self):
         global BOARD_HEIGHT, BOARD_WIDTH
@@ -62,6 +64,9 @@ class Player(object):
 
     def set_admin(self, bool):
         self.is_admin = bool
+
+    def get_id(self):
+        return self.id
 
 
     # TODO: Save the name and check wether it is already taken
