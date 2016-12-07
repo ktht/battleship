@@ -1,19 +1,28 @@
 import time, itertools, random, pika, threading, game
 import numpy as np
 
+# Global constants ------------------------------------------------------------
 SERVER_NAME = 'Server'
-
+CTRL_REQ_BOARD      = int(0x01 << 0)
+CTRL_HIT_SHIP       = int(0x01 << 1)
+CTRL_REQ_ID         = int(0x01 << 2)
 is_running = True
 
-connection = pika.BlockingConnection(pika.ConnectionParameters(
+announc_con = pika.BlockingConnection(pika.ConnectionParameters(
         host='localhost'))
-channel = connection.channel()
+bcast_con = pika.BlockingConnection(pika.ConnectionParameters(
+        host='localhost'))
+rpc_con = pika.BlockingConnection(pika.ConnectionParameters(
+        host='localhost'))
+announc_ch = announc_con.channel()
+bcast_ch = bcast_con.channel()
+rpc_ch = rpc_con.channel()
 
-channel.exchange_declare(exchange=SERVER_NAME,
+bcast_ch.exchange_declare(exchange=SERVER_NAME,
                          type='fanout')
-channel.exchange_declare(exchange='announcements',
+announc_ch.exchange_declare(exchange='announcements',
                          type='fanout', arguments={'x-message-ttl' : 5000})
-channel.queue_declare(queue='rpc_queue')
+rpc_ch.queue_declare(queue='rpc_queue')
 
 def send_announcements():
     i = 0
@@ -21,30 +30,33 @@ def send_announcements():
         i +=1
         time.sleep(5)
         msg = SERVER_NAME+':'+str(len(game.players))
-        channel.basic_publish(exchange='announcements',
+        announc_ch.basic_publish(exchange='announcements',
                               routing_key='',
                               body=msg)
 
 def send_broadcasts():
     while is_running:
-        time.sleep(1)
-        channel.basic_publish(exchange=SERVER_NAME,
+        time.sleep(5)
+        bcast_ch.basic_publish(exchange=SERVER_NAME,
                             routing_key='',
-                            body="Sending server broadcast!")
+                            body="0:Sending server broadcast!")
 
 
 def on_request(ch, method, props, body):
-    n = int(body)
+    n = body.split(':')
 
-    if n == 1:
+    if int(n[0]) == 0:
         id = game.create_player('Pepe')
 
         # game.create_player('Peeter')
         # print(game.players[0].get_admin())
         print('Created player with id: '+str(id))
+        response = id
+    else:
+        response = -1
 
     print("Body is: (%s)" % n)
-    response = 125
+
 
     ch.basic_publish(exchange='',
                      routing_key=props.reply_to,
@@ -55,12 +67,10 @@ def on_request(ch, method, props, body):
 
 
 def game_session():
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(on_request, queue='rpc_queue')
+    rpc_ch.basic_qos(prefetch_count=1)
+    rpc_ch.basic_consume(on_request, queue='rpc_queue')
     print(" [x] Awaiting RPC requests")
-    channel.start_consuming()
-
-
+    rpc_ch.start_consuming()
 
 
 if __name__ == '__main__':
@@ -69,9 +79,6 @@ if __name__ == '__main__':
     print('New game created!')
     #channel.basic_qos(prefetch_count=1)
     #channel.basic_consume(on_request, queue='rpc_queue')
-
-    #print(" [x] Awaiting RPC requests")
-    #channel.start_consuming()
 
     threads = []
     t1 = threading.Thread(target=game_session, name='Game_session_RPC')
@@ -85,16 +92,10 @@ if __name__ == '__main__':
     t2.start()
     t3.start()
 
-
-    #game.create_player('Karl')
-    #game.create_player('Pepe')
-    #game.create_player('Mohammad')
-    #game.create_player('Pepe')
     #board = game.create_board()
 
     #game.populate_board(board)
     #board.print_board()
-
 
     #t.join()
 

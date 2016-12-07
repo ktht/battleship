@@ -2,8 +2,8 @@ import pika, os, logging, sys, uuid, threading, time, Queue
 from os import system, name
 logging.basicConfig()
 
+# Global constants -----------------------------------------------
 GAME_SERVER_NAME = 'Server'
-
 global_bool = False
 initialization_phase = True
 is_alive = True
@@ -11,34 +11,19 @@ counter = 0
 queue = Queue.Queue()
 cv = threading.Condition()
 
-def testing():
-    connection.add_timeout(5, testing)
+#def testing():
+#    server_list_con.add_timeout(5, testing)
 #    print('Timeout thingyu')
 
-connection = pika.BlockingConnection(pika.ConnectionParameters(
+server_list_con = pika.BlockingConnection(pika.ConnectionParameters(
         host='localhost'))
-connection.add_timeout(5, testing)
-channel = connection.channel()
+#server_list_con.add_timeout(5, testing)
+server_list_ch = server_list_con.channel()
 
 
-connection2 = pika.BlockingConnection(pika.ConnectionParameters(
+server_bcasts_con = pika.BlockingConnection(pika.ConnectionParameters(
         host='localhost'))
-channel2 = connection2.channel()
-
-def setup():
-    channel.exchange_declare(exchange='announcements',
-                             type='fanout')
-    result = channel.queue_declare(exclusive=True)
-    queue_name = result.method.queue
-
-    channel.queue_bind(exchange='announcements',
-                       queue=queue_name)
-    channel.basic_consume(public_announc_callback,
-                          queue=queue_name,
-                          no_ack=True)
-
-
-
+server_bcasts_ch = server_bcasts_con.channel()
 
 class TimedSet(set): # http://stackoverflow.com/questions/16136979/set-class-with-timed-auto-remove-of-elements
     def __init__(self): # For maintaining available server list
@@ -55,41 +40,37 @@ class TimedSet(set): # http://stackoverflow.com/questions/16136979/set-class-wit
 
 
 def listen_public_announcements():
-    #while is_alive:
-    #print(' [*] Announcements started listening. To exit press CTRL+C')
+    server_list_ch.exchange_declare(exchange='announcements',
+                             type='fanout')
+    result = server_list_ch.queue_declare(exclusive=True)
+    queue_name = result.method.queue
+
+    server_list_ch.queue_bind(exchange='announcements',
+                       queue=queue_name)
+    server_list_ch.basic_consume(public_announc_callback,
+                          queue=queue_name,
+                          no_ack=True)
+
     print('Getting list of available servers, please wait...')
     print('If no servers are seen after 10 seconds, then no server is available.')
-    try:
-        channel.start_consuming()
-    except KeyboardInterrupt:
-        channel.stop_consuming()
-    #channel.start_consuming()
+    server_list_ch.start_consuming()
 
 
 def listen_server_bcasts():
-    server_name = raw_input('\nEnter the name of the server you want to connect to: \n')
-
-
-    # TODO check if this name matches any names in the set
-    channel2.exchange_declare(exchange=server_name,
+    server_bcasts_ch.exchange_declare(exchange=GAME_SERVER_NAME,
                               type='fanout')
 
-    result2 = channel2.queue_declare(exclusive=True)
+    result2 = server_bcasts_ch.queue_declare(exclusive=True)
     queue_name2 = result2.method.queue
 
-    channel2.queue_bind(exchange=server_name,
+    server_bcasts_ch.queue_bind(exchange=GAME_SERVER_NAME,
                         queue=queue_name2)
-    channel2.basic_consume(server_bcasts_callback,
+    server_bcasts_ch.basic_consume(server_bcasts_callback,
                            queue=queue_name2,
                            no_ack=True)
     system('cls' if name == 'nt' else 'clear')
     print(' [*] Broadcasts started listening. To exit press CTRL+C')
-
-    try:
-        channel2.start_consuming()
-    except KeyboardInterrupt:
-        channel2.stop_consuming()
-    #channel2.start_consuming()
+    server_bcasts_ch.start_consuming()
 
 
 def public_announc_callback(ch, method, properties, body):
@@ -110,28 +91,25 @@ def public_announc_callback(ch, method, properties, body):
                 print('Updating...')
                 initialization_phase = True
             else:
-                connection.close()
+                server_list_con.close()
 
 def server_bcasts_callback(ch, method, properties, body):
-    cv.acquire()
-    queue.put(body)
-    cv.notify_all()
-    cv.release()
-
+    if int(body.split(':')[0]) == player_id:
+        cv.acquire()
+        queue.put(body)
+        cv.notify_all()
+        cv.release()
     #print(" [x] %r" % body)
-
 
 class RpcClient(object):
     def __init__(self):
-        #self.connection = pika.BlockingConnection(pika.ConnectionParameters(
-        #        host='localhost'))
+        self.rpc_con = pika.BlockingConnection(pika.ConnectionParameters(
+            host='localhost'))
+        self.rpc_ch = self.rpc_con.channel()
+        self.rpc_result = self.rpc_ch.queue_declare(exclusive=True)
+        self.callback_queue = self.rpc_result.method.queue
 
-        #self.channel = self.connection.channel()
-
-        result = channel.queue_declare(exclusive=True)
-        self.callback_queue = result.method.queue
-
-        channel.basic_consume(self.on_response, no_ack=True,
+        self.rpc_ch.basic_consume(self.on_response, no_ack=True,
                                    queue=self.callback_queue)
 
     def on_response(self, ch, method, props, body):
@@ -141,7 +119,7 @@ class RpcClient(object):
     def call(self, n):
         self.response = None
         self.corr_id = str(uuid.uuid4())
-        channel.basic_publish(exchange='',
+        self.rpc_ch.basic_publish(exchange='',
                                    routing_key='rpc_queue',
                                    properties=pika.BasicProperties(
                                          reply_to = self.callback_queue,
@@ -149,7 +127,7 @@ class RpcClient(object):
                                          ),
                                    body=str(n))
         while self.response is None:
-            connection.process_data_events()
+            self.rpc_con.process_data_events()
         return int(self.response)
 
 
@@ -160,6 +138,9 @@ def do_rpc():
             cv.wait()
         try:
             msg = queue.get(0)
+            pcs = msg.split(':')
+            if pcs[1] == 1:
+                coords = raw_input('Enter the coords you want to hit: \n')
             print("This got put into the queue: " + str(msg))
 
         except Queue.Empty:
@@ -167,18 +148,9 @@ def do_rpc():
         cv.release()
 
 
-#    while(is_alive):
-#        cv.acquire()
-#        if queue_send2srvr.qsize() == 0:
-#            cv.wait()
-    #response = rpc_client.call(1)
-    #print("Got a response: %r" % response)
-
-
 if __name__ == '__main__':
     rpc_client = RpcClient()
     t_set = TimedSet()
-    setup()
 
     threads = []
     get_servers_list = threading.Thread(target=listen_public_announcements, name='Listen_Public_Announc')
@@ -191,6 +163,16 @@ if __name__ == '__main__':
     get_servers_list.start()
     get_servers_list.join()
 
+    server_name = raw_input('\nEnter the name of the server you want to connect to: \n')
+    GAME_SERVER_NAME = server_name
+    # TODO check if this name matches any names in the set
+
+
+    u_name = raw_input("Enter your username:\n")
+    pwd = raw_input("Enter your password:\n")
+    # TODO check uname and pass if they are taken already
+    player_id = int(rpc_client.call(':'.join(('0',u_name,pwd))))
+
     t1.setDaemon(True)
     t2.setDaemon(True)
     t2.start()
@@ -200,16 +182,3 @@ if __name__ == '__main__':
     print('Exited while loop')
     t1.join()
     t2.join()
-
-    #print('\n t3 started')
-
-
-    #print('Got bool!')
-
-    #t3.join()
-
-    #is_alive = False
-
-    #t2.start()
-    #t3.join()
-
