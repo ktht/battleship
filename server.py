@@ -1,10 +1,13 @@
-import time, itertools, random, pika, threading, game, common, db
+import time, itertools, random, pika, threading, game, common, db, Queue
 import numpy as np
 
 # Global constants ------------------------------------------------------------
 SERVER_NAME = 'Server'
 
 is_running = True
+game_not_started = True
+queue = Queue.Queue()
+cv = threading.Condition()
 
 announc_con = pika.BlockingConnection(pika.ConnectionParameters(
         host='localhost'))
@@ -34,14 +37,24 @@ def send_announcements():
 
 def send_broadcasts():
     while is_running:
-        time.sleep(5)
+        cv.acquire()
+        if queue.qsize() == 0:
+            cv.wait()
+        try:
+            msg = queue.get(0)
+        except Queue.Empty:
+            pass
+        cv.release()
         bcast_ch.basic_publish(exchange=SERVER_NAME,
                             routing_key='',
-                            body="0:Sending server broadcast!")
+                            body=msg)
 
 
 def request_new_id(u_name, pwd):
-    print("Creating ID for a new player!")
+    print("New player connecting!")
+    for p in game.players: # Checks if this username has already logged on
+        if p.get_name() == u_name:
+            return common.CTRL_ERR_LOGGED_IN
     if db_instance.auth_user(u_name, pwd) == 0:  # If authentication was succesful
         return game.create_player(u_name)
     elif db_instance.add_user(u_name, pwd) == 0: # If succesfully created a new player
@@ -49,7 +62,17 @@ def request_new_id(u_name, pwd):
     else:
         return common.CTRL_ERR_DB # Username is taken or entered password is wrong
 
-
+def start_game(player_id):
+    for player in game.players:
+        if player.get_id() == player_id and player.get_admin():
+            board = game.create_board()
+            game.populate_board(board)
+            cv.acquire()
+            queue.put(common.marshal(common.CTRL_START_GAME, common.CTRL_ALL_PLAYERS))
+            cv.notify_all()
+            cv.release()
+            return common.CTRL_OK
+    return common.CTRL_NOT_ADMIN
 
 def on_request(ch, method, props, body):
     request = common.unmarshal(body)
@@ -57,6 +80,10 @@ def on_request(ch, method, props, body):
 
     if CTRL_CODE == common.CTRL_REQ_ID:
         response = request_new_id(request[1], request[2])
+    elif CTRL_CODE == common.CTRL_START_GAME:
+        response = start_game(request[1])
+        global game_not_started
+        game_not_started = False
 
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board = game.create_board()
@@ -91,8 +118,6 @@ if __name__ == '__main__':
     game = game.BattleShips()
 
     print('New game created!')
-    #channel.basic_qos(prefetch_count=1)
-    #channel.basic_consume(on_request, queue='rpc_queue')
 
     threads = []
     t1 = threading.Thread(target=game_session, name='Game_session_RPC')
@@ -105,6 +130,21 @@ if __name__ == '__main__':
     t1.start()
     t2.start()
     t3.start()
+
+    while game_not_started:
+        if len(game.players) != 0: # Not worth sending it, when no clients are connected
+            for player in game.players:
+                if player.get_admin():
+                    name = player.get_name()
+                    break
+                else: name = 'None'
+            cv.acquire()
+            queue.put(common.marshal(common.CTRL_BRDCAST_MSG,"Game not started yet, "+
+                                     str(len(game.players))+" client(s) connected, "+
+                                     str(name)+" has rights to start the game."))
+            cv.notify_all()
+            cv.release()
+            time.sleep(5)
 
     #board = game.create_board()
 

@@ -68,8 +68,8 @@ class Player(object):
     def get_id(self):
         return self.id
 
-
-    # TODO: Save the name and check wether it is already taken
+    def get_name(self):
+        return self.name
 
 class Board(object):
     def __init__(self, mark):

@@ -100,12 +100,15 @@ def public_announc_callback(ch, method, properties, body):
                 server_list_con.close()
 
 def server_bcasts_callback(ch, method, properties, body):
-    #if int(body.split(':')[0]) == player_id:
-    cv.acquire()
-    queue.put(body)
-    cv.notify_all()
-    cv.release()
-    #print(" [x] %r" % body)
+    msg = common.unmarshal(body)
+    CTRL_CODE = int(msg[0])
+    if CTRL_CODE == common.CTRL_BRDCAST_MSG:
+        print(msg[1])
+    else:
+        cv.acquire()
+        queue.put(body)
+        cv.notify_all()
+        cv.release()
 
 class RpcClient(object):
     def __init__(self):
@@ -177,6 +180,8 @@ def authenticate():
             print('This username is taken or you entered a wrong password, please try again.')
         elif player_id == common.CTRL_ERR_MAX_PL:
             print('Sorry, maximum number of players has been exceeded.')
+        elif player_id == common.CTRL_ERR_LOGGED_IN:
+            print('Sorry but this user is already logged in.')
         else:
             boolean = True
 
