@@ -1,11 +1,9 @@
-import time, itertools, random, pika, threading, game
+import time, itertools, random, pika, threading, game, common, db
 import numpy as np
 
 # Global constants ------------------------------------------------------------
 SERVER_NAME = 'Server'
-CTRL_REQ_BOARD      = int(0x01 << 0)
-CTRL_HIT_SHIP       = int(0x01 << 1)
-CTRL_REQ_ID         = int(0x01 << 2)
+
 is_running = True
 
 announc_con = pika.BlockingConnection(pika.ConnectionParameters(
@@ -42,17 +40,25 @@ def send_broadcasts():
                             body="0:Sending server broadcast!")
 
 
+def request_new_id(u_name, pwd):
+    print("Creating ID for a new player!")
+    if db_instance.auth_user(u_name, pwd) == 0:  # If authentication was succesful
+        return game.create_player(u_name)
+    elif db_instance.add_user(u_name, pwd) == 0: # If succesfully created a new player
+        return game.create_player(u_name)
+    else:
+        return common.CTRL_ERR_DB # Username is taken or entered password is wrong
+
+
+
 def on_request(ch, method, props, body):
-    n = body.split(':')
+    request = common.unmarshal(body)
+    CTRL_CODE = int(request[0])
 
-    if int(n[0]) == 0:
-        id = game.create_player('Pepe')
+    if CTRL_CODE == common.CTRL_REQ_ID:
+        response = request_new_id(request[1], request[2])
 
-        # game.create_player('Peeter')
-        # print(game.players[0].get_admin())
-        print('Created player with id: '+str(id))
-        response = id
-    elif int(n[1]) == CTRL_REQ_BOARD:
+    elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board = game.create_board()
         game.populate_board(board)
         board_array = board.get_board()  # Stuff for sending the board to client
@@ -63,7 +69,6 @@ def on_request(ch, method, props, body):
         print(board_shape)
         #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
-    print("Body is: (%s)" % n)
 
     ch.basic_publish(exchange='',
                      routing_key=props.reply_to,
@@ -74,6 +79,7 @@ def on_request(ch, method, props, body):
 
 
 def game_session():
+
     rpc_ch.basic_qos(prefetch_count=1)
     rpc_ch.basic_consume(on_request, queue='rpc_queue')
     print(" [x] Awaiting RPC requests")
@@ -81,6 +87,7 @@ def game_session():
 
 
 if __name__ == '__main__':
+    db_instance = db.db(common.DATABASE_FILE_NAME)
     game = game.BattleShips()
 
     print('New game created!')

@@ -1,12 +1,8 @@
-import pika, os, logging, sys, uuid, threading, time, Queue
-from os import system, name
+import pika, os, logging, sys, uuid, threading, time, Queue, db, common
 import numpy as np
 logging.basicConfig()
 
 # Global constants -----------------------------------------------
-CTRL_REQ_BOARD      = int(0x01 << 0)
-CTRL_HIT_SHIP       = int(0x01 << 1)
-CTRL_REQ_ID         = int(0x01 << 2)
 GAME_SERVER_NAME = 'Server'
 global_bool = False
 initialization_phase = True
@@ -14,6 +10,8 @@ is_alive = True
 counter = 0
 queue = Queue.Queue()
 cv = threading.Condition()
+temp_dict = {}
+
 
 #def testing():
 #    server_list_con.add_timeout(5, testing)
@@ -28,6 +26,8 @@ server_list_ch = server_list_con.channel()
 server_bcasts_con = pika.BlockingConnection(pika.ConnectionParameters(
         host='localhost'))
 server_bcasts_ch = server_bcasts_con.channel()
+
+
 
 class TimedSet(set): # http://stackoverflow.com/questions/16136979/set-class-with-timed-auto-remove-of-elements
     def __init__(self): # For maintaining available server list
@@ -72,7 +72,7 @@ def listen_server_bcasts():
     server_bcasts_ch.basic_consume(server_bcasts_callback,
                            queue=queue_name2,
                            no_ack=True)
-    system('cls' if name == 'nt' else 'clear')
+    common.clear_screen()
     print(' [*] Broadcasts started listening. To exit press CTRL+C')
     server_bcasts_ch.start_consuming()
 
@@ -86,10 +86,12 @@ def public_announc_callback(ch, method, properties, body):
         if counter >= 2:
             counter = 0
             initialization_phase = False
-            system('cls' if name == 'nt' else 'clear')
+            common.clear_screen()
             print('Available servers and number of clients connected:')
             for t in t_set:
                 print(t)
+                global temp_dict
+                temp_dict[t] = []
             x = raw_input('\nWould you like to update the list? (y/n) \n')
             if x == 'y':
                 print('Updating...')
@@ -152,36 +154,60 @@ def do_rpc():
         cv.release()
 
 
+def authenticate():
+    global temp_dict, GAME_SERVER_NAME
+    boolean = True
+    while boolean:
+        server_name = raw_input('\nEnter the name of the server you want to connect to: \n')
+        for s in temp_dict:
+            if str(server_name) in str(s):
+                boolean = False
+                temp_dict.clear()
+                break
+
+    GAME_SERVER_NAME = server_name
+    common.clear_screen()
+
+    print('Connected to ' + str(GAME_SERVER_NAME))
+    while not boolean:
+        u_name = raw_input("Enter your username:\n")
+        pwd = raw_input("Enter your password:\n")
+        player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID,u_name,pwd)))
+        if player_id == common.CTRL_ERR_DB:
+            print('This username is taken or you entered a wrong password, please try again.')
+        elif player_id == common.CTRL_ERR_MAX_PL:
+            print('Sorry, maximum number of players has been exceeded.')
+        else:
+            boolean = True
+
+    return u_name, player_id
+
 if __name__ == '__main__':
     rpc_client = RpcClient()
     t_set = TimedSet()
-
     threads = []
     get_servers_list_th = threading.Thread(target=listen_public_announcements, name='Listen_Public_Announc')
     listen_server_bcasts_th = threading.Thread(target=listen_server_bcasts, name='Listen_Server_Bcasts')
     rpc_thread = threading.Thread(target=do_rpc, name='RPC_Handling')
-
     threads.extend((rpc_thread, listen_server_bcasts_th, get_servers_list_th))
 
     get_servers_list_th.setDaemon(True)
     get_servers_list_th.start()
     get_servers_list_th.join()
 
-    server_name = raw_input('\nEnter the name of the server you want to connect to: \n')
-    GAME_SERVER_NAME = server_name
-    # TODO check if this name matches any names in the set
-
-
-    u_name = raw_input("Enter your username:\n")
-    pwd = raw_input("Enter your password:\n")
+    u_name, player_id = authenticate()
+    print('Hello '+str(u_name)+' you have connected succesfully!')
+    #if
+    #print('My username is: ' +str(u_name))
+    #print('My id is: '+str(player_id))
 
     # TODO check uname and pass if they are taken already
-    player_id = int(rpc_client.call(':'.join(('0',u_name,pwd))))
+
 
     # If is admin: - start new game
-    board_w_shape = rpc_client.call(':'.join((str(player_id), str(CTRL_REQ_BOARD))))
-    board, shapex, shapey = board_w_shape.split(':')
-    print(np.fromstring(board, dtype=int).reshape(int(shapex), int(shapey)))
+    #board_w_shape = rpc_client.call(':'.join((str(player_id), str(CTRL_REQ_BOARD))))
+    #board, shapex, shapey = board_w_shape.split(':')
+    #print(np.fromstring(board, dtype=int).reshape(int(shapex), int(shapey)))
 
     listen_server_bcasts_th.setDaemon(True)
     rpc_thread.setDaemon(True)

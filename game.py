@@ -1,4 +1,4 @@
-import time, itertools, random, pika, threading
+import time, itertools, random, pika, threading, common
 from os import system, name
 from string import ascii_uppercase
 import numpy as np
@@ -29,7 +29,7 @@ class BattleShips(object):
             self.new_player = Player(name)
             self.players.append(self.new_player)
         else:
-            print("Maximum number of players exceeded!")
+            return common.CTRL_ERR_MAX_PL
         return self.new_player.get_id()
 
     def create_board(self):
@@ -133,26 +133,3 @@ class Score(object):
 
 if __name__ == '__main__':
     game = BattleShips()
-
-    print('New game created!')
-    #channel.basic_qos(prefetch_count=1)
-    #channel.basic_consume(on_request, queue='rpc_queue')
-
-    #print(" [x] Awaiting RPC requests")
-    #channel.start_consuming()
-    game.create_player('Karl')
-    game.create_player('Pepe')
-    game.create_player('Mohammad')
-    board = game.create_board()
-    game.populate_board(board)
-    board.print_board()
-
-    #board_array = board.get_board() # Stuff for sending the board to client
-    #board_shape = board_array.shape
-    #f = board_array.tostring()
-    #print(np.fromstring(f, dtype=int).reshape(board_shape))
-    # system('cls' if name == 'nt' else 'clear')
-
-    #print(board_array.shape)
-    #board.print_board()
-
