@@ -64,13 +64,16 @@ def request_new_id(u_name, pwd):
 
 def start_game(player_id):
     for player in game.players:
-        if player.get_id() == player_id and player.get_admin():
-            board = game.create_board()
+        if int(player.get_id()) == int(player_id) and player.get_admin():
+            global board
+            board = game.create_board()  # Creates and populates the board after admin starts the game
             game.populate_board(board)
             cv.acquire()
             queue.put(common.marshal(common.CTRL_START_GAME, common.CTRL_ALL_PLAYERS))
             cv.notify_all()
             cv.release()
+            global game_not_started
+            game_not_started = False # Stops server from sending broadcasts
             return common.CTRL_OK
     return common.CTRL_NOT_ADMIN
 
@@ -82,18 +85,10 @@ def on_request(ch, method, props, body):
         response = request_new_id(request[1], request[2])
     elif CTRL_CODE == common.CTRL_START_GAME:
         response = start_game(request[1])
-        global game_not_started
-        game_not_started = False
-
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
-        board = game.create_board()
-        game.populate_board(board)
-        board_array = board.get_board()  # Stuff for sending the board to client
+        board_array = board.get_board()  # Array needed to send board to client
         board_shape = board_array.shape
-        print(board_array)
-        f = board_array.tostring()
-        response = ':'.join((f, str(board_shape[0]), str(board_shape[1])))
-        print(board_shape)
+        response = common.marshal(board_array.tostring(),board_shape[0],board_shape[1])
         #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
 
@@ -145,6 +140,7 @@ if __name__ == '__main__':
             cv.notify_all()
             cv.release()
             time.sleep(5)
+
 
     #board = game.create_board()
 

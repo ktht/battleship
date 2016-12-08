@@ -11,6 +11,9 @@ counter = 0
 queue = Queue.Queue()
 cv = threading.Condition()
 temp_dict = {}
+game_board = []
+BOARD_WIDTH = 10
+BOARD_HEIGHT = 10
 
 
 #def testing():
@@ -104,6 +107,13 @@ def server_bcasts_callback(ch, method, properties, body):
     CTRL_CODE = int(msg[0])
     if CTRL_CODE == common.CTRL_BRDCAST_MSG:
         print(msg[1])
+    elif CTRL_CODE == common.CTRL_START_GAME:
+        board = common.unmarshal(rpc_client.call(common.marshal(common.CTRL_REQ_BOARD)))
+        global game_board, BOARD_WIDTH, BOARD_HEIGHT
+        BOARD_WIDTH = int(board[2])
+        BOARD_HEIGHT = int(board[1])
+        game_board = np.fromstring(board[0], dtype=int).reshape(BOARD_HEIGHT,BOARD_WIDTH)
+        common.print_board(game_board, BOARD_WIDTH, BOARD_HEIGHT)
     else:
         cv.acquire()
         queue.put(body)
@@ -191,6 +201,7 @@ if __name__ == '__main__':
     rpc_client = RpcClient()
     t_set = TimedSet()
     threads = []
+    game_board = []
     get_servers_list_th = threading.Thread(target=listen_public_announcements, name='Listen_Public_Announc')
     listen_server_bcasts_th = threading.Thread(target=listen_server_bcasts, name='Listen_Server_Bcasts')
     rpc_thread = threading.Thread(target=do_rpc, name='RPC_Handling')
@@ -198,16 +209,10 @@ if __name__ == '__main__':
 
     get_servers_list_th.setDaemon(True)
     get_servers_list_th.start()
-    get_servers_list_th.join()
+    get_servers_list_th.join() # After server has been chosen, this thread stops
 
     u_name, player_id = authenticate()
     print('Hello '+str(u_name)+' you have connected succesfully!')
-    #if
-    #print('My username is: ' +str(u_name))
-    #print('My id is: '+str(player_id))
-
-    # TODO check uname and pass if they are taken already
-
 
     # If is admin: - start new game
     #board_w_shape = rpc_client.call(':'.join((str(player_id), str(CTRL_REQ_BOARD))))
@@ -217,7 +222,17 @@ if __name__ == '__main__':
     listen_server_bcasts_th.setDaemon(True)
     rpc_thread.setDaemon(True)
     listen_server_bcasts_th.start()
-    rpc_thread.start()
+
+    if player_id == 1:  # Admin has player id 1
+        boolean = True
+        while boolean:
+            x = raw_input("Do you want to start the game? (y/n)")
+            if x == 'y':
+                rpc_client.call(common.marshal(common.CTRL_START_GAME, player_id))
+                boolean = False
+
+
+    #rpc_thread.start()
     while not global_bool:
         time.sleep(0.2)
     print('Exited while loop')

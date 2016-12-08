@@ -1,4 +1,5 @@
 from os import system, name
+from string import ascii_uppercase
 
 
 # Glboal constants ----------------------------------
@@ -24,3 +25,9 @@ def marshal(*args):
 
 def unmarshal(*args):
     return args[0].split(':')
+
+def print_board(board, width, height):
+    print('      ' + ' '.join('%-3s' % i for i in range(1, width + 1)))  # Column numbering
+    print('   ' + '-' * 4 * width)  # Line between board and colum  numbers
+    for row_label, row in zip(ascii_uppercase[:height],board):  # Board with row numbering
+        print '%-3s|  %s' % (row_label, ' '.join('%-3s' % i for i in row))
