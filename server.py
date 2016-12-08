@@ -52,11 +52,18 @@ def on_request(ch, method, props, body):
         # print(game.players[0].get_admin())
         print('Created player with id: '+str(id))
         response = id
-    else:
-        response = -1
+    elif int(n[1]) == CTRL_REQ_BOARD:
+        board = game.create_board()
+        game.populate_board(board)
+        board_array = board.get_board()  # Stuff for sending the board to client
+        board_shape = board_array.shape
+        print(board_array)
+        f = board_array.tostring()
+        response = ':'.join((f, str(board_shape[0]), str(board_shape[1])))
+        print(board_shape)
+        #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
     print("Body is: (%s)" % n)
-
 
     ch.basic_publish(exchange='',
                      routing_key=props.reply_to,

@@ -1,8 +1,12 @@
 import pika, os, logging, sys, uuid, threading, time, Queue
 from os import system, name
+import numpy as np
 logging.basicConfig()
 
 # Global constants -----------------------------------------------
+CTRL_REQ_BOARD      = int(0x01 << 0)
+CTRL_HIT_SHIP       = int(0x01 << 1)
+CTRL_REQ_ID         = int(0x01 << 2)
 GAME_SERVER_NAME = 'Server'
 global_bool = False
 initialization_phase = True
@@ -94,11 +98,11 @@ def public_announc_callback(ch, method, properties, body):
                 server_list_con.close()
 
 def server_bcasts_callback(ch, method, properties, body):
-    if int(body.split(':')[0]) == player_id:
-        cv.acquire()
-        queue.put(body)
-        cv.notify_all()
-        cv.release()
+    #if int(body.split(':')[0]) == player_id:
+    cv.acquire()
+    queue.put(body)
+    cv.notify_all()
+    cv.release()
     #print(" [x] %r" % body)
 
 class RpcClient(object):
@@ -128,7 +132,7 @@ class RpcClient(object):
                                    body=str(n))
         while self.response is None:
             self.rpc_con.process_data_events()
-        return int(self.response)
+        return self.response
 
 
 def do_rpc():
@@ -153,15 +157,15 @@ if __name__ == '__main__':
     t_set = TimedSet()
 
     threads = []
-    get_servers_list = threading.Thread(target=listen_public_announcements, name='Listen_Public_Announc')
-    t1 = threading.Thread(target=listen_server_bcasts, name='Listen_Server_Bcasts')
-    t2 = threading.Thread(target=do_rpc, name='RPC_Handling')
+    get_servers_list_th = threading.Thread(target=listen_public_announcements, name='Listen_Public_Announc')
+    listen_server_bcasts_th = threading.Thread(target=listen_server_bcasts, name='Listen_Server_Bcasts')
+    rpc_thread = threading.Thread(target=do_rpc, name='RPC_Handling')
 
-    threads.extend((t1, t2, get_servers_list))
+    threads.extend((rpc_thread, listen_server_bcasts_th, get_servers_list_th))
 
-    get_servers_list.setDaemon(True)
-    get_servers_list.start()
-    get_servers_list.join()
+    get_servers_list_th.setDaemon(True)
+    get_servers_list_th.start()
+    get_servers_list_th.join()
 
     server_name = raw_input('\nEnter the name of the server you want to connect to: \n')
     GAME_SERVER_NAME = server_name
@@ -170,15 +174,21 @@ if __name__ == '__main__':
 
     u_name = raw_input("Enter your username:\n")
     pwd = raw_input("Enter your password:\n")
+
     # TODO check uname and pass if they are taken already
     player_id = int(rpc_client.call(':'.join(('0',u_name,pwd))))
 
-    t1.setDaemon(True)
-    t2.setDaemon(True)
-    t2.start()
-    t1.start()
+    # If is admin: - start new game
+    board_w_shape = rpc_client.call(':'.join((str(player_id), str(CTRL_REQ_BOARD))))
+    board, shapex, shapey = board_w_shape.split(':')
+    print(np.fromstring(board, dtype=int).reshape(int(shapex), int(shapey)))
+
+    listen_server_bcasts_th.setDaemon(True)
+    rpc_thread.setDaemon(True)
+    listen_server_bcasts_th.start()
+    rpc_thread.start()
     while not global_bool:
         time.sleep(0.2)
     print('Exited while loop')
-    t1.join()
-    t2.join()
+    rpc_thread.join()
+    listen_server_bcasts_th.join()
