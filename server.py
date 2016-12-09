@@ -158,9 +158,9 @@ def game_session():
 
 if __name__ == '__main__':
     logging.basicConfig(
-        level=logging.DEBUG,
-        format='[%(asctime)s] [%(threadName)s] [%(module)s:%(funcName)s:%(lineno)d] [%(levelname)s] -- %(message)s',
-        stream=sys.stdout
+        level  = logging.DEBUG,
+        format = '[%(asctime)s] [%(threadName)s] [%(module)s:%(funcName)s:%(lineno)d] [%(levelname)s] -- %(message)s',
+        stream = sys.stdout
     )
 
     db_instance = db(common.DATABASE_FILE_NAME)
@@ -177,25 +177,29 @@ if __name__ == '__main__':
         t.start()
         logging.debug("Started thread '%s'" % t.getName())
 
-    while game_not_started:
-        logging.debug("Entered loop")
-        game.cv_create_player.acquire()
-        if game.get_nof_players() == 0: # Not worth sending it, when no clients are connected
-            logging.debug("Waiting a player to join")
-            game.cv_create_player.wait()
-            logging.debug("Got a player!")
-        game.cv_create_player.release()
+    try:
+        while game_not_started:
+            logging.debug("Entered loop")
+            game.cv_create_player.acquire()
+            if game.get_nof_players() == 0: # Not worth sending it, when no clients are connected
+                logging.debug("Waiting a player to join")
+                game.cv_create_player.wait(timeout = 5)
+            game.cv_create_player.release()
+            if game.get_nof_players() == 0: continue
 
-        cv.acquire()
-        queue.put(common.marshal(
-            common.CTRL_BRDCAST_MSG,
-            "Game not started yet, {nof_clients} client(s) connected, {admin} has rights to start the game.".format(
-                nof_clients = game.get_nof_players(),
-                admin       = game.get_admin()
-            )))
-        cv.notify_all()
-        cv.release()
-        time.sleep(5)
+            cv.acquire()
+            queue.put(common.marshal(
+                common.CTRL_BRDCAST_MSG,
+                "Game not started yet, {nof_clients} client(s) connected, {admin} has rights to start the game.".format(
+                    nof_clients = game.get_nof_players(),
+                    admin       = game.get_admin()
+                )))
+            cv.notify_all()
+            cv.release()
+    except KeyboardInterrupt:
+        is_running = False
+        logging.debug("Bye bye")
+    logging.debug("Exiting initial loop")
 
     #board = game.create_board()
 
