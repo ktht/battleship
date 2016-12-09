@@ -34,7 +34,7 @@ announc_ch.exchange_declare(
     type      = 'fanout',
     arguments = { 'x-message-ttl' : 5000 }
 )
-rpc_ch.queue_declare(queue='rpc_queue')
+rpc_ch.queue_declare(queue = 'rpc_queue')
 
 def send_announcements():
     i = 0

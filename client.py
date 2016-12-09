@@ -12,6 +12,7 @@ is_alive = True
 counter = 0
 queue = Queue.Queue()
 cv = threading.Condition()
+cv_init = threading.Condition()
 
 # Game-specific variables ----------------------------------------
 temp_dict  = {}
@@ -114,6 +115,9 @@ def public_announc_callback(ch, method, properties, body):
         if counter >= 1:
             counter = 0
             initialization_phase = False
+            cv_init.acquire()
+            cv_init.notify_all()
+            cv_init.release()
             common.clear_screen()
             print('Available servers and number of clients connected:')
             for t in t_set:
@@ -213,7 +217,7 @@ def authenticate():
     while not boolean:
         u_name = raw_input("Enter your username: ")
         pwd    = getpass.getpass("Enter your password: ")
-        player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID,u_name,pwd)))
+        player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
         if player_id == common.CTRL_ERR_DB:
             print('This username is taken or you entered a wrong password, please try again.')
         elif player_id == common.CTRL_ERR_MAX_PL:
@@ -246,8 +250,17 @@ if __name__ == '__main__':
     for t in threads:
         t.setDaemon(True)
 
+    cv_init.acquire()
     get_servers_list_th.start()
-    get_servers_list_th.join() # After server has been chosen, this thread stops
+    while True:
+        if initialization_phase:
+            cv_init.wait(timeout = 10)
+        else:
+            break
+    cv_init.release()
+
+    #get_servers_list_th.join() # After server has been chosen, this thread stops
+    #print "joined"
 
     u_name, player_id = authenticate()
     print('Hello, {username}! You have connected succesfully!'.format(username = u_name))
