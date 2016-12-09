@@ -50,6 +50,7 @@ def send_announcements():
             routing_key = '',
             body        = msg
         )
+        logging.debug('Sent {announce_it}th announcement'.format(announce_it = i))
 
 def send_broadcasts():
     while is_running:

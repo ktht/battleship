@@ -1,6 +1,4 @@
-import pika, logging, uuid, threading, time, Queue, common, getpass
-import numpy as np
-logging.basicConfig()
+import pika, logging, uuid, threading, time, Queue, common, getpass, sys, numpy as np
 
 # Global constants -----------------------------------------------
 GAME_SERVER_NAME = 'Server'
@@ -9,10 +7,11 @@ GAME_SERVER_NAME = 'Server'
 global_bool = False
 initialization_phase = True
 is_alive = True
-counter = 0
 queue = Queue.Queue()
 cv = threading.Condition()
 cv_init = threading.Condition()
+start_t = 0
+server_list_timeout = 10
 
 # Game-specific variables ----------------------------------------
 available_servers  = []
@@ -75,12 +74,12 @@ def listen_public_announcements():
         no_ack = True
     )
 
+    global start_t
+    global server_list_timeout
     print('Getting list of available servers, please wait...')
-    print('If no servers are seen after 10 seconds, then no server is available.')
-    try:
-        server_list_ch.start_consuming()
-    except KeyboardInterrupt:
-        server_list_ch.stop_consuming()
+    print('If no servers are seen after %d seconds, then no server is available.' % server_list_timeout)
+    start_t = time.time()
+    server_list_ch.start_consuming()
 
 def listen_server_bcasts():
     server_bcasts_ch.exchange_declare(
@@ -100,36 +99,39 @@ def listen_server_bcasts():
         queue  = queue_name2,
         no_ack = True
     )
-    try:
-        server_bcasts_ch.start_consuming()
-    except KeyboardInterrupt:
-        server_bcasts_ch.stop_consuming()
+    server_bcasts_ch.start_consuming()
 
 def public_announc_callback(ch, method, properties, body):
     t_set.add(body)
+
+    global start_t
+    global server_list_timeout
     global initialization_phase
-    if initialization_phase:
-        global counter
-        counter += 1
-        if counter >= 1:
-            counter = 0
-            initialization_phase = False
+    global available_servers
+
+    if time.time() - start_t > server_list_timeout:
+        start_t = time.time()
+        if initialization_phase:
             common.clear_screen()
             print('Available servers and number of clients connected:')
-            for t in t_set:
+        for t in t_set:
+            if initialization_phase:
                 print("{server_name}: {nof_clients} client(s)".format(
                     server_name = t[0],
                     nof_clients = t[1]
                 ))
-                global available_servers
-                available_servers.append(t[0])
+            available_servers.append(t[0])
+        if initialization_phase:
             if common.query_yes_no("Would you like to update the list?", default = "no"):
                 print('Updating...')
-                initialization_phase = True
-            else:
+                return
+            elif len(available_servers) > 0:
+                initialization_phase = False
                 cv_init.acquire()
                 cv_init.notify_all()
                 cv_init.release()
+
+                # we must close the connection, see https://github.com/pika/pika/issues/698
                 server_list_con.close()
 
 def server_bcasts_callback(ch, method, properties, body):
@@ -205,7 +207,7 @@ def authenticate():
     global available_servers, GAME_SERVER_NAME
     boolean = True
     while boolean:
-        server_name = raw_input('\nEnter the name of the server you want to connect to: ')
+        server_name = raw_input('Enter the name of the server you want to connect to: ')
         if server_name in available_servers:
             boolean = False
             del available_servers[:]
@@ -234,6 +236,12 @@ def authenticate():
     return u_name, player_id
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level  = logging.CRITICAL,
+        format = '[%(asctime)s] [%(threadName)s] [%(module)s:%(funcName)s:%(lineno)d] [%(levelname)s] -- %(message)s',
+        stream = sys.stdout
+    )
+
     rpc_client = RpcClient()
     t_set = TimedSet()
 
