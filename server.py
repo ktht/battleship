@@ -183,8 +183,9 @@ if __name__ == '__main__':
         if game.get_nof_players() == 0: # Not worth sending it, when no clients are connected
             logging.debug("Waiting a player to join")
             game.cv_create_player.wait()
+            logging.debug("Got a player!")
+        game.cv_create_player.release()
 
-        logging.debug("Got a player!")
         cv.acquire()
         queue.put(common.marshal(
             common.CTRL_BRDCAST_MSG,
@@ -194,8 +195,7 @@ if __name__ == '__main__':
             )))
         cv.notify_all()
         cv.release()
-        game.cv_create_player.release()
-        #time.sleep(5)
+        time.sleep(5)
 
     #board = game.create_board()
 
