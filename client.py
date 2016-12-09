@@ -100,8 +100,6 @@ def listen_server_bcasts():
         queue  = queue_name2,
         no_ack = True
     )
-    common.clear_screen()
-    print('Broadcasts started listening. To exit press CTRL+C')
     try:
         server_bcasts_ch.start_consuming()
     except KeyboardInterrupt:
@@ -231,6 +229,7 @@ def authenticate():
             print('Sorry but this user is already logged in.')
         else:
             boolean = True
+            common.clear_screen()
 
     return u_name, player_id
 
