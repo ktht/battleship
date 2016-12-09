@@ -23,7 +23,7 @@ class db(object):
     __COL_SALT     = 'salt'
     __COL_HASH     = 'hash'
 
-    __OK                  = int(0x00)
+    OK                  = int(0x00)
     __ERR_DB_NOT_READY    = int(0x01 << 0)
     __ERR_USER_EXISTS     = int(0x01 << 1)
     __ERR_USER_NOT_EXIST  = int(0x01 << 2)
@@ -75,7 +75,7 @@ class db(object):
         if not self.initialized:
             return db.__ERR_DB_NOT_READY
 
-        ret_code = db.__OK
+        ret_code = db.OK
         con = None
         try:
             con = sqlite3.connect(self.path)
@@ -123,7 +123,7 @@ class db(object):
         if not self.initialized:
             return db.__ERR_DB_NOT_READY
 
-        ret_code = db.__OK
+        ret_code = db.OK
         con = None
         try:
             con = sqlite3.connect(self.path)

@@ -1,5 +1,5 @@
-import time, itertools, random, pika, threading, game, common, db, Queue
-import numpy as np
+import time, pika, threading, game, common, Queue, logging, sys
+from db import db
 
 # Global constants ------------------------------------------------------------
 SERVER_NAME = 'Server'
@@ -8,6 +8,9 @@ is_running = True
 game_not_started = True
 queue = Queue.Queue()
 cv = threading.Condition()
+
+l_adduser = threading.Lock()
+cv_adduser = threading.Condition()
 
 announc_con = pika.BlockingConnection(pika.ConnectionParameters(
         host='localhost'))
@@ -31,9 +34,9 @@ def send_announcements():
         i +=1
         time.sleep(5)
         msg = SERVER_NAME+':'+str(len(game.players))
-        announc_ch.basic_publish(exchange='announcements',
-                              routing_key='',
-                              body=msg)
+        announc_ch.basic_publish(exchange    = 'announcements',
+                                 routing_key = '',
+                                 body        = msg)
 
 def send_broadcasts():
     while is_running:
@@ -45,20 +48,36 @@ def send_broadcasts():
         except Queue.Empty:
             pass
         cv.release()
-        bcast_ch.basic_publish(exchange=SERVER_NAME,
-                            routing_key='',
-                            body=msg)
+        bcast_ch.basic_publish(exchange    = SERVER_NAME,
+                               routing_key = '',
+                               body        = msg)
 
-
+@common.synchronized_g(l_adduser)
 def request_new_id(u_name, pwd):
     print("New player connecting!")
     for p in game.players: # Checks if this username has already logged on
         if p.get_name() == u_name:
             return common.CTRL_ERR_LOGGED_IN
-    if db_instance.auth_user(u_name, pwd) == 0:  # If authentication was succesful
-        return game.create_player(u_name)
-    elif db_instance.add_user(u_name, pwd) == 0: # If succesfully created a new player
-        return game.create_player(u_name)
+
+    if db_instance.auth_user(u_name, pwd) == db_instance.OK:  # If authentication was succesful
+        player_id, retcode = game.create_player(u_name)
+        if retcode == common.CTRL_OK:
+            cv_adduser.acquire()
+            if len(game.players) == 1:
+                cv_adduser.notify_all()
+            cv_adduser.release()
+            return player_id
+
+    elif db_instance.add_user(u_name, pwd) == db_instance.OK: # If succesfully created a new player
+        player_id, retcode = game.create_player(u_name)
+        if retcode == common.CTRL_OK:
+            cv_adduser.acquire()
+            if len(game.players) == 1:
+                cv_adduser.notify_all()
+            cv_adduser.release()
+            return player_id
+        return player_id
+
     else:
         return common.CTRL_ERR_DB # Username is taken or entered password is wrong
 
@@ -109,7 +128,13 @@ def game_session():
 
 
 if __name__ == '__main__':
-    db_instance = db.db(common.DATABASE_FILE_NAME)
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='[%(asctime)s] [%(threadName)s] [%(module)s:%(funcName)s:%(lineno)d] [%(levelname)s] -- %(message)s',
+        stream=sys.stdout
+    )
+
+    db_instance = db(common.DATABASE_FILE_NAME)
     game = game.BattleShips()
 
     print('New game created!')
@@ -127,19 +152,22 @@ if __name__ == '__main__':
     t3.start()
 
     while game_not_started:
-        if len(game.players) != 0: # Not worth sending it, when no clients are connected
-            for player in game.players:
-                if player.get_admin():
-                    name = player.get_name()
-                    break
-                else: name = 'None'
-            cv.acquire()
-            queue.put(common.marshal(common.CTRL_BRDCAST_MSG,"Game not started yet, "+
-                                     str(len(game.players))+" client(s) connected, "+
-                                     str(name)+" has rights to start the game."))
-            cv.notify_all()
-            cv.release()
-            time.sleep(5)
+        cv_adduser.acquire()
+        if len(game.players) == 0: # Not worth sending it, when no clients are connected
+            cv_adduser.wait()
+        for player in game.players:
+            if player.get_admin():
+                name = player.get_name()
+                break
+            else: name = 'None'
+        cv.acquire()
+        queue.put(common.marshal(common.CTRL_BRDCAST_MSG,"Game not started yet, "+
+                                 str(len(game.players))+" client(s) connected, "+
+                                 str(name)+" has rights to start the game."))
+        cv.notify_all()
+        cv.release()
+        time.sleep(5)
+        cv_adduser.release()
 
 
     #board = game.create_board()

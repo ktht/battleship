@@ -1,5 +1,4 @@
-from os import system, name
-from string import ascii_uppercase
+import logging, functools, os, string
 
 
 # Glboal constants ----------------------------------
@@ -17,7 +16,7 @@ CTRL_BRDCAST_MSG    = int(30)
 DATABASE_FILE_NAME  = "users.db"
 
 def clear_screen():
-    system('cls' if name == 'nt' else 'clear')
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 def marshal(*args):
     strings = map(lambda x: str(x), args)
@@ -29,5 +28,30 @@ def unmarshal(*args):
 def print_board(board, width, height):
     print('      ' + ' '.join('%-3s' % i for i in range(1, width + 1)))  # Column numbering
     print('   ' + '-' * 4 * width)  # Line between board and colum  numbers
-    for row_label, row in zip(ascii_uppercase[:height],board):  # Board with row numbering
+    for row_label, row in zip(string.ascii_uppercase[:height],board):  # Board with row numbering
         print '%-3s|  %s' % (row_label, ' '.join('%-3s' % i for i in row))
+
+def synchronized(lock_name):
+    def wrapper(func):
+        @functools.wraps(func)
+        def decorator(self, *args, **kwargs):
+            logging.debug("Acquiring lock: %s" % lock_name)
+            lock = getattr(self, lock_name)
+            with lock:
+                result = func(self, *args, **kwargs)
+            logging.debug("Released lock: %s" % lock_name)
+            return result
+        return decorator
+    return wrapper
+
+def synchronized_g(lock):
+    def wrapper(func):
+        @functools.wraps(func)
+        def decorator(*args, **kw):
+            lock.acquire()
+            try:
+                return func(*args, **kw)
+            finally:
+                lock.release()
+        return decorator
+    return wrapper

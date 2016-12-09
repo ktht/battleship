@@ -29,8 +29,8 @@ class BattleShips(object):
             self.new_player = Player(name)
             self.players.append(self.new_player)
         else:
-            return common.CTRL_ERR_MAX_PL
-        return self.new_player.get_id()
+            return -1, common.CTRL_ERR_MAX_PL
+        return self.new_player.get_id(), common.CTRL_OK
 
     def create_board(self):
         global BOARD_HEIGHT, BOARD_WIDTH
