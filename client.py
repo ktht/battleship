@@ -1,4 +1,4 @@
-import pika, os, logging, sys, uuid, threading, time, Queue, db, common
+import pika, logging, uuid, threading, time, Queue, common, getpass
 import numpy as np
 logging.basicConfig()
 
@@ -43,7 +43,7 @@ class TimedSet(set):
     def __init__(self):
         self.__table = {}
 
-    def add(self, item, timeout=5):
+    def add(self, item, timeout = 7):
         self.__table[item] = time.time() + timeout
         set.add(self, item)
 
@@ -111,7 +111,7 @@ def public_announc_callback(ch, method, properties, body):
     if initialization_phase:
         global counter
         counter += 1
-        if counter >= 2:
+        if counter >= 1:
             counter = 0
             initialization_phase = False
             common.clear_screen()
@@ -188,7 +188,7 @@ def do_rpc():
             msg = queue.get(0)
             pcs = msg.split(':')
             if pcs[1] == 1:
-                coords = raw_input('Enter the coords you want to hit: \n')
+                coords = raw_input('Enter the coords you want to hit: ')
             print("This got put into the queue: " + str(msg))
 
         except Queue.Empty:
@@ -199,7 +199,7 @@ def authenticate():
     global temp_dict, GAME_SERVER_NAME
     boolean = True
     while boolean:
-        server_name = raw_input('\nEnter the name of the server you want to connect to: \n')
+        server_name = raw_input('\nEnter the name of the server you want to connect to: ')
         for s in temp_dict:
             if str(server_name) in str(s):
                 boolean = False
@@ -211,8 +211,8 @@ def authenticate():
 
     print('Connected to {game_server_name}'.format(game_server_name = GAME_SERVER_NAME))
     while not boolean:
-        u_name = raw_input("Enter your username:\n")
-        pwd = raw_input("Enter your password:\n")
+        u_name = raw_input("Enter your username: ")
+        pwd    = getpass.getpass("Enter your password: ")
         player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID,u_name,pwd)))
         if player_id == common.CTRL_ERR_DB:
             print('This username is taken or you entered a wrong password, please try again.')
