@@ -185,7 +185,11 @@ if __name__ == '__main__':
                 logging.debug("Waiting a player to join")
                 game.cv_create_player.wait(timeout = 5)
             game.cv_create_player.release()
-            if game.get_nof_players() == 0: continue
+
+            if game.get_nof_players() == 0:
+                continue
+            else:
+                time.sleep(5)
 
             cv.acquire()
             queue.put(common.marshal(
