@@ -25,11 +25,17 @@ def marshal(*args):
 def unmarshal(*args):
     return args[0].split(':')
 
-def print_board(board, width, height):
-    print('      ' + ' '.join('%-3s' % i for i in range(1, width + 1)))  # Column numbering
-    print('   ' + '-' * 4 * width)  # Line between board and colum  numbers
-    for row_label, row in zip(string.ascii_uppercase[:height],board):  # Board with row numbering
-        print '%-3s|  %s' % (row_label, ' '.join('%-3s' % i for i in row))
+def print_board(board, board2):
+    counter = 0
+    print('      ' + ' '.join('%-3s' % i for i in range(1, board.shape[1] + 1))+' '*10),  # Column numbering
+    print('      ' + ' '.join('%-3s' % i for i in range(1, board.shape[1] + 1)))
+    print('   ' + '-' * 4 * board.shape[1]+' '*12),  # Line between board and colum  numbers
+    print('   ' + '-' * 4 * board.shape[1])
+    second_board = zip(string.ascii_uppercase[:board2.shape[0]],board2)
+    for row_label, row in zip(string.ascii_uppercase[:board.shape[0]],board):  # Board with row numbering
+        print '%-3s|  %s' % (row_label, ' '.join('%-3s' % i for i in row))+' '*10,
+        print '%-3s|  %s' % (second_board[counter][0], ' '.join('%-3s' % i for i in second_board[counter][1]))
+        counter += 1
 
 def synchronized(lock_name):
     def wrapper(func):

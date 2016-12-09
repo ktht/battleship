@@ -133,6 +133,7 @@ def on_request(ch, method, props, body):
         response = start_game(request[1])
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board_array = board.get_board()  # Array needed to send board to client
+        print(board_array)
         board_shape = board_array.shape
         response = common.marshal(board_array.tostring(), board_shape[0], board_shape[1])
         #print(np.fromstring(f, dtype=int).reshape(board_shape))
@@ -206,6 +207,8 @@ if __name__ == '__main__':
         logging.debug("Bye bye")
     logging.debug("Exiting initial loop")
 
+    while True:
+        time.sleep(0.5)
     #board = game.create_board()
 
     #game.populate_board(board)

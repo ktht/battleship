@@ -11,23 +11,17 @@ queue = Queue.Queue()
 cv = threading.Condition()
 cv_init = threading.Condition()
 start_t = 0
-server_list_timeout = 10
+server_list_timeout = 6
 
 # Game-specific variables ----------------------------------------
 available_servers  = []
-game_board = []
-BOARD_WIDTH  = 10
-BOARD_HEIGHT = 10
-
-#def testing():
-#    server_list_con.add_timeout(5, testing)
-#    print('Timeout thingyu')
+player_ships_board = []
+player_hits_board = []
 
 # Indirect communication channels --------------------------------
 server_list_con = pika.BlockingConnection(
     pika.ConnectionParameters(host = 'localhost')
 )
-#server_list_con.add_timeout(5, testing)
 server_bcasts_con = pika.BlockingConnection(
     pika.ConnectionParameters(host = 'localhost')
 )
@@ -134,6 +128,15 @@ def public_announc_callback(ch, method, properties, body):
                 # we must close the connection, see https://github.com/pika/pika/issues/698
                 server_list_con.close()
 
+def process_board(board, height, width):
+    game_board = np.fromstring(board, dtype=int).reshape(height, width)
+    game_board = game_board.astype(str)
+    for index, x in np.ndenumerate(game_board):
+        if not x.startswith(str(player_id)):
+            game_board[index] = '.'
+        else: game_board[index] = x[1:]
+    return game_board
+
 def server_bcasts_callback(ch, method, properties, body):
     msg = common.unmarshal(body)
     CTRL_CODE = int(msg[0])
@@ -141,11 +144,11 @@ def server_bcasts_callback(ch, method, properties, body):
         print(msg[1])
     elif CTRL_CODE == common.CTRL_START_GAME:
         board = common.unmarshal(rpc_client.call(common.marshal(common.CTRL_REQ_BOARD)))
-        global game_board, BOARD_WIDTH, BOARD_HEIGHT
-        BOARD_WIDTH  = int(board[2])
-        BOARD_HEIGHT = int(board[1])
-        game_board = np.fromstring(board[0], dtype = int).reshape(BOARD_HEIGHT, BOARD_WIDTH)
-        common.print_board(game_board, BOARD_WIDTH, BOARD_HEIGHT)
+        global player_ships_board, player_hits_board
+        player_ships_board = process_board(board[0], int(board[1]) ,int(board[2]))
+        player_hits_board = np.full((int(board[1]), int(board[2])), '-', dtype=str)
+        common.print_board(player_ships_board, player_hits_board)
+        #common.print_board(player_hits_board)
     else:
         cv.acquire()
         queue.put(body)
@@ -222,6 +225,7 @@ def authenticate():
     while not boolean:
         u_name = raw_input("Enter your username: ")
         pwd    = getpass.getpass("Enter your password: ")
+        #pwd = raw_input("Enter your password: ")
         player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
         if player_id == common.CTRL_ERR_DB:
             print('This username is taken or you entered a wrong password, please try again.')
