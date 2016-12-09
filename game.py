@@ -1,25 +1,26 @@
-import time, itertools, random, pika, threading, common
-from os import system, name
+import itertools, random, threading, common, logging
 from string import ascii_uppercase
 import numpy as np
 
 
 # Global Constants  -------------------------------------------------------------------
-BOARD_WIDTH = 10
+BOARD_WIDTH  = 10
 BOARD_HEIGHT = 10
 
-NO_SHIPS_MARK = 0
-CARRIER_MARK = 5
+NO_SHIPS_MARK   = 0
+CARRIER_MARK    = 5
 BATTLESHIP_MARK = 4
-CRUISER_MARK = 3
-SUBMARINE_MARK = 6
-DESTROYER_MARK = 2
+CRUISER_MARK    = 3
+SUBMARINE_MARK  = 6
+DESTROYER_MARK  = 2
 
-ships = {"Carrier": [5, CARRIER_MARK],
-             "Battleship": [4, BATTLESHIP_MARK],
-             "Cruiser": [3, CRUISER_MARK],
-             "Submarine": [3, SUBMARINE_MARK],
-             "Destroyer": [2, DESTROYER_MARK]}
+ships = {
+    "Carrier"    : [ 5, CARRIER_MARK    ],
+    "Battleship" : [ 4, BATTLESHIP_MARK ],
+    "Cruiser"    : [ 3, CRUISER_MARK    ],
+    "Submarine"  : [ 3, SUBMARINE_MARK  ],
+    "Destroyer"  : [ 2, DESTROYER_MARK  ]
+}
 
 class BattleShips(object):
 
@@ -58,23 +59,28 @@ class BattleShips(object):
     def get_nof_players(self):
         return len(self.players)
 
+    def get_admin(self):
+        admins = filter(lambda x: x.is_admin(), self.players)
+        if len(admins) == 1:
+            return admins[0].get_name()
+        if len(admins) > 1:
+            logging.error("Multiple admins")
+        return ''
+
 class Player(object):
     newid = itertools.count().next
     def __init__(self, name):
         self.name = name
         self.id = Player.newid()+1 # Gives incremental new ID to every new player
-        if self.id == 1:
-            self.is_admin = True
-        else:
-            self.is_admin = False
+        self.is_admin_b = True if self.id == 1 else False
         #self.board_ships = Board(NO_SHIPS_MARK) # Board holding players personal ship locations
         #self.board_myhits = Board(NO_SHIPS_MARK) # Board showing the hits made to other players
 
-    def get_admin(self):
-        return self.is_admin
+    def is_admin(self):
+        return self.is_admin_b
 
     def set_admin(self, bool):
-        self.is_admin = bool
+        self.is_admin_b = bool
 
     def get_id(self):
         return self.id
@@ -86,7 +92,13 @@ class Board(object):
     def __init__(self, mark):
         self.bool = False
         self.board = self.create_board(mark, BOARD_WIDTH, BOARD_HEIGHT)
-        self.score = {CARRIER_MARK:0,BATTLESHIP_MARK:0,CRUISER_MARK:0,SUBMARINE_MARK:0,DESTROYER_MARK:0}
+        self.score = {
+            CARRIER_MARK    : 0,
+            BATTLESHIP_MARK : 0,
+            CRUISER_MARK    : 0,
+            SUBMARINE_MARK  : 0,
+            DESTROYER_MARK  : 0
+        }
 
     def create_board(self, mark, w, h):
         if type(mark) is str:

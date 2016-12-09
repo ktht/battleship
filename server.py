@@ -104,7 +104,7 @@ def request_new_id(u_name, pwd):
 
 def start_game(player_id):
     for player in game.players:
-        if int(player.get_id()) == int(player_id) and player.get_admin():
+        if int(player.get_id()) == int(player_id) and player.is_admin():
             global board
             board = game.create_board()  # Creates and populates the board after admin starts the game
             game.populate_board(board)
@@ -177,17 +177,12 @@ if __name__ == '__main__':
         if game.get_nof_players() == 0: # Not worth sending it, when no clients are connected
             game.cv_create_player.wait()
 
-        name = 'None'
-        for player in game.players:
-            if player.get_admin():
-                name = player.get_name()
-                break
         cv.acquire()
         queue.put(common.marshal(
             common.CTRL_BRDCAST_MSG,
             "Game not started yet, {nof_clients} client(s) connected, {admin} has rights to start the game.".format(
                 nof_clients = game.get_nof_players(),
-                admin       = name
+                admin       = game.get_admin()
             )))
         cv.notify_all()
         cv.release()
