@@ -4,28 +4,36 @@ from db import db
 # Global constants ------------------------------------------------------------
 SERVER_NAME = 'Server'
 
-is_running = True
+# Synchronization primitives --------------------------------------------------
+is_running       = True
 game_not_started = True
 queue = Queue.Queue()
 cv = threading.Condition()
-
 l_adduser = threading.Lock()
-cv_adduser = threading.Condition()
 
-announc_con = pika.BlockingConnection(pika.ConnectionParameters(
-        host='localhost'))
-bcast_con = pika.BlockingConnection(pika.ConnectionParameters(
-        host='localhost'))
-rpc_con = pika.BlockingConnection(pika.ConnectionParameters(
-        host='localhost'))
+# Indirect communication channels ---------------------------------------------
+announc_con = pika.BlockingConnection(
+    pika.ConnectionParameters(host = 'localhost')
+)
+bcast_con = pika.BlockingConnection(
+    pika.ConnectionParameters(host = 'localhost')
+)
+rpc_con = pika.BlockingConnection(
+    pika.ConnectionParameters(host = 'localhost')
+)
 announc_ch = announc_con.channel()
-bcast_ch = bcast_con.channel()
-rpc_ch = rpc_con.channel()
+bcast_ch   = bcast_con.channel()
+rpc_ch     = rpc_con.channel()
 
-bcast_ch.exchange_declare(exchange=SERVER_NAME,
-                         type='fanout')
-announc_ch.exchange_declare(exchange='announcements',
-                         type='fanout', arguments={'x-message-ttl' : 5000})
+bcast_ch.exchange_declare(
+    exchange = SERVER_NAME,
+    type     = 'fanout'
+)
+announc_ch.exchange_declare(
+    exchange  = 'announcements',
+    type      = 'fanout',
+    arguments = { 'x-message-ttl' : 5000 }
+)
 rpc_ch.queue_declare(queue='rpc_queue')
 
 def send_announcements():
@@ -33,10 +41,12 @@ def send_announcements():
     while is_running:
         i +=1
         time.sleep(5)
-        msg = SERVER_NAME+':'+str(len(game.players))
-        announc_ch.basic_publish(exchange    = 'announcements',
-                                 routing_key = '',
-                                 body        = msg)
+        msg = SERVER_NAME+':'+str(game.get_nof_players())
+        announc_ch.basic_publish(
+            exchange    = 'announcements',
+            routing_key = '',
+            body        = msg
+        )
 
 def send_broadcasts():
     while is_running:
@@ -54,29 +64,40 @@ def send_broadcasts():
 
 @common.synchronized_g(l_adduser)
 def request_new_id(u_name, pwd):
-    print("New player connecting!")
-    for p in game.players: # Checks if this username has already logged on
-        if p.get_name() == u_name:
-            return common.CTRL_ERR_LOGGED_IN
+    '''Adds or creates a new user if it doesn't exist in the DB
+    :param u_name: string, user name
+    :param pwd:    string, password
+    :return:       int, user ID (a number less than 10), or an error code (> 10)
 
-    if db_instance.auth_user(u_name, pwd) == db_instance.OK:  # If authentication was succesful
-        player_id, retcode = game.create_player(u_name)
-        if retcode == common.CTRL_OK:
-            cv_adduser.acquire()
-            if len(game.players) == 1:
-                cv_adduser.notify_all()
-            cv_adduser.release()
-            return player_id
+    TODO: reconsider the return values
+    '''
+    logging.info("New player '%s' connected!" % u_name)
 
-    elif db_instance.add_user(u_name, pwd) == db_instance.OK: # If succesfully created a new player
+    # Checks if this username has already logged on
+    if game.user_exists(u_name):
+        logging.debug("User '%s' tried to log in second time" % u_name)
+        return common.CTRL_ERR_LOGGED_IN
+
+    # First try to authenticate
+    valid_user = False
+    auth_result = db_instance.auth_user(u_name, pwd)
+    if auth_result == db_instance.ERR_USER_NOT_EXIST:
+        # Note that external lock ensures that another user isn't being added to the DB in b/w
+        logging.debug("User '%s' doesn't exist, creating a new one" % u_name)
+        if db_instance.add_user(u_name, pwd) == db_instance.OK:
+            # Create a new user if doesn't exist, and say the user is auth'ed
+            logging.debug("User '%s' added to the DB" % u_name)
+            valid_user = True
+    elif auth_result == db_instance.OK:
+        logging.debug("User '%s' authenticated successfully" % u_name)
+        valid_user = True
+
+    # i.e. if authentication was succesful or a new user was added
+    if valid_user:
         player_id, retcode = game.create_player(u_name)
+        logging.debug("A new player '%s' was added to the game" % u_name)
         if retcode == common.CTRL_OK:
-            cv_adduser.acquire()
-            if len(game.players) == 1:
-                cv_adduser.notify_all()
-            cv_adduser.release()
             return player_id
-        return player_id
 
     else:
         return common.CTRL_ERR_DB # Username is taken or entered password is wrong
@@ -107,25 +128,25 @@ def on_request(ch, method, props, body):
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board_array = board.get_board()  # Array needed to send board to client
         board_shape = board_array.shape
-        response = common.marshal(board_array.tostring(),board_shape[0],board_shape[1])
+        response = common.marshal(board_array.tostring(), board_shape[0], board_shape[1])
         #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
 
-    ch.basic_publish(exchange='',
-                     routing_key=props.reply_to,
-                     properties=pika.BasicProperties(correlation_id= \
-                                                         props.correlation_id),
-                     body=str(response))
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+    ch.basic_publish(
+        exchange    = '',
+        routing_key = props.reply_to,
+        properties  = pika.BasicProperties(correlation_id = props.correlation_id),
+        body        = str(response)
+    )
+    ch.basic_ack(delivery_tag = method.delivery_tag)
 
 
 def game_session():
 
-    rpc_ch.basic_qos(prefetch_count=1)
-    rpc_ch.basic_consume(on_request, queue='rpc_queue')
-    print(" [x] Awaiting RPC requests")
+    rpc_ch.basic_qos(prefetch_count = 1)
+    rpc_ch.basic_consume(on_request, queue = 'rpc_queue')
+    logging.info("Awaiting RPC requests")
     rpc_ch.start_consuming()
-
 
 if __name__ == '__main__':
     logging.basicConfig(
@@ -137,12 +158,12 @@ if __name__ == '__main__':
     db_instance = db(common.DATABASE_FILE_NAME)
     game = game.BattleShips()
 
-    print('New game created!')
+    logging.info('New game created!')
 
     threads = []
-    t1 = threading.Thread(target=game_session, name='Game_session_RPC')
-    t2 = threading.Thread(target=send_announcements, name='Server_announcements')
-    t3 = threading.Thread(target=send_broadcasts, name='Server_broadcasts')
+    t1 = threading.Thread(target = game_session,       name = 'Game_session_RPC')
+    t2 = threading.Thread(target = send_announcements, name = 'Server_announcements')
+    t3 = threading.Thread(target = send_broadcasts,    name = 'Server_broadcasts')
     threads.extend((t1, t2, t3))
 
     #t.setDaemon(True)
@@ -152,22 +173,27 @@ if __name__ == '__main__':
     t3.start()
 
     while game_not_started:
-        cv_adduser.acquire()
-        if len(game.players) == 0: # Not worth sending it, when no clients are connected
-            cv_adduser.wait()
+        game.cv_create_player.acquire()
+        if game.get_nof_players() == 0: # Not worth sending it, when no clients are connected
+            game.cv_create_player.wait()
+
+        name = 'None'
         for player in game.players:
             if player.get_admin():
                 name = player.get_name()
                 break
-            else: name = 'None'
         cv.acquire()
-        queue.put(common.marshal(common.CTRL_BRDCAST_MSG,"Game not started yet, "+
-                                 str(len(game.players))+" client(s) connected, "+
-                                 str(name)+" has rights to start the game."))
+        queue.put(common.marshal(
+            common.CTRL_BRDCAST_MSG,
+            "Game not started yet, {nof_clients} client(s) connected, {admin} has rights to start the game.".format(
+                nof_clients = game.get_nof_players(),
+                admin       = name
+            )))
         cv.notify_all()
         cv.release()
+        game.cv_create_player.release()
         time.sleep(5)
-        cv_adduser.release()
+
 
 
     #board = game.create_board()

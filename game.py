@@ -22,12 +22,19 @@ ships = {"Carrier": [5, CARRIER_MARK],
              "Destroyer": [2, DESTROYER_MARK]}
 
 class BattleShips(object):
-    players = []
+
+    def __init__(self):
+        self.players = []
+        self.cv_create_player = threading.Condition()
 
     def create_player(self, name):
         if len(self.players) < 10:
+            self.cv_create_player.acquire()
             self.new_player = Player(name)
             self.players.append(self.new_player)
+            if len(self.players) == 1:
+                self.cv_create_player.notify_all()
+            self.cv_create_player.release()
         else:
             return -1, common.CTRL_ERR_MAX_PL
         return self.new_player.get_id(), common.CTRL_OK
@@ -45,7 +52,11 @@ class BattleShips(object):
                 while not board.bool:
                     board.ship_placement(ships[ship], player.id)
 
+    def user_exists(self, name):
+        return any(map(lambda x: x.get_name() == name, self.players))
 
+    def get_nof_players(self):
+        return len(self.players)
 
 class Player(object):
     newid = itertools.count().next

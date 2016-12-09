@@ -24,12 +24,12 @@ class db(object):
     __COL_HASH     = 'hash'
 
     OK                  = int(0x00)
-    __ERR_DB_NOT_READY    = int(0x01 << 0)
-    __ERR_USER_EXISTS     = int(0x01 << 1)
-    __ERR_USER_NOT_EXIST  = int(0x01 << 2)
-    __ERR_AUTH            = int(0x01 << 3)
-    __ERR_SQL             = int(0x01 << 4)
-    __ERR_UNKNOWN         = int(0x01 << 5)
+    ERR_DB_NOT_READY    = int(0x01 << 0)
+    ERR_USER_EXISTS     = int(0x01 << 1)
+    ERR_USER_NOT_EXIST  = int(0x01 << 2)
+    ERR_AUTH            = int(0x01 << 3)
+    ERR_SQL             = int(0x01 << 4)
+    ERR_UNKNOWN         = int(0x01 << 5)
 
     class error(Exception):
         pass
@@ -73,7 +73,7 @@ class db(object):
                  ERR_* if there was an error
         '''
         if not self.initialized:
-            return db.__ERR_DB_NOT_READY
+            return db.ERR_DB_NOT_READY
 
         ret_code = db.OK
         con = None
@@ -90,7 +90,7 @@ class db(object):
             )
             rows = cur.fetchall()
             if rows:
-                ret_code = db.__ERR_USER_EXISTS
+                ret_code = db.ERR_USER_EXISTS
                 raise db.error("Username already exists in the DB")
 
             # now we're ready to create hash & salt for the guy
@@ -102,12 +102,12 @@ class db(object):
             con.commit()
         except sqlite3.Error as err:
             logging.error("SQL error: %s" % err)
-            ret_code = db.__ERR_SQL
+            ret_code = db.ERR_SQL
         except db.error as err:
             logging.error("DB error: %s" % err)
         except BaseException as err:
             logging.debug("Unknown error: %s" % err)
-            ret_code = db.__ERR_UNKNOWN
+            ret_code = db.ERR_UNKNOWN
         finally:
             if con:
                 con.close()
@@ -121,7 +121,7 @@ class db(object):
                  ERR_*, if there was an error
         '''
         if not self.initialized:
-            return db.__ERR_DB_NOT_READY
+            return db.ERR_DB_NOT_READY
 
         ret_code = db.OK
         con = None
@@ -136,23 +136,23 @@ class db(object):
             ), (username,))
             rows = cur.fetchall()
             if not rows:
-                ret_code = db.__ERR_USER_NOT_EXIST
+                ret_code = db.ERR_USER_NOT_EXIST
                 raise db.error("The user does not exist")
 
             # check if the provided password is valid
             _, salt, pwh = rows[0]
             hash_test = hashlib.sha512(password + salt + self.pepper).hexdigest()
             if hash_test != pwh:
-                ret_code = db.__ERR_AUTH
+                ret_code = db.ERR_AUTH
                 raise db.error("User authentication error")
         except sqlite3.Error as err:
             logging.error("SQL error: %s" % err)
-            ret_code = db.__ERR_SQL
+            ret_code = db.ERR_SQL
         except db.error as err:
             logging.error("DB error: %s" % err)
         except BaseException as err:
             logging.error("Unknown error: %s" % err)
-            ret_code = db.__ERR_UNKNOWN
+            ret_code = db.ERR_UNKNOWN
         finally:
             if con:
                 con.close()
