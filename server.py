@@ -41,7 +41,10 @@ def send_announcements():
     while is_running:
         i +=1
         time.sleep(5)
-        msg = SERVER_NAME+':'+str(game.get_nof_players())
+        msg =  "{server_name}:{nof_players}".format(
+            server_name = SERVER_NAME,
+            nof_players = game.get_nof_players()
+        )
         announc_ch.basic_publish(
             exchange    = 'announcements',
             routing_key = '',
@@ -58,9 +61,11 @@ def send_broadcasts():
         except Queue.Empty:
             pass
         cv.release()
-        bcast_ch.basic_publish(exchange    = SERVER_NAME,
-                               routing_key = '',
-                               body        = msg)
+        bcast_ch.basic_publish(
+            exchange    = SERVER_NAME,
+            routing_key = '',
+            body        = msg
+        )
 
 @common.synchronized_g(l_adduser)
 def request_new_id(u_name, pwd):
@@ -131,7 +136,6 @@ def on_request(ch, method, props, body):
         response = common.marshal(board_array.tostring(), board_shape[0], board_shape[1])
         #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
-
     ch.basic_publish(
         exchange    = '',
         routing_key = props.reply_to,
@@ -145,8 +149,12 @@ def game_session():
 
     rpc_ch.basic_qos(prefetch_count = 1)
     rpc_ch.basic_consume(on_request, queue = 'rpc_queue')
-    logging.info("Awaiting RPC requests")
-    rpc_ch.start_consuming()
+    try:
+        logging.info("Awaiting RPC requests")
+        rpc_ch.start_consuming()
+    except KeyboardInterrupt:
+        logging.info("Stopped waiting for RPC requests")
+        rpc_ch.stop_consuming()
 
 if __name__ == '__main__':
     logging.basicConfig(
@@ -158,25 +166,25 @@ if __name__ == '__main__':
     db_instance = db(common.DATABASE_FILE_NAME)
     game = game.BattleShips()
 
-    logging.info('New game created!')
+    logging.info('A new game created!')
 
-    threads = []
-    t1 = threading.Thread(target = game_session,       name = 'Game_session_RPC')
-    t2 = threading.Thread(target = send_announcements, name = 'Server_announcements')
-    t3 = threading.Thread(target = send_broadcasts,    name = 'Server_broadcasts')
-    threads.extend((t1, t2, t3))
-
-    #t.setDaemon(True)
-    #t2.setDaemon(True)
-    t1.start()
-    t2.start()
-    t3.start()
+    thread_game_session         = threading.Thread(target = game_session,       name = 'Game_session_RPC')
+    thread_server_announcements = threading.Thread(target = send_announcements, name = 'Server_announcements')
+    thread_server_broadcast     = threading.Thread(target = send_broadcasts,    name = 'Server_broadcasts')
+    threads = [thread_game_session, thread_server_announcements, thread_server_broadcast]
+    for t in threads:
+        t.setDaemon(True)
+        t.start()
+        logging.debug("Started thread '%s'" % t.getName())
 
     while game_not_started:
+        logging.debug("Entered loop")
         game.cv_create_player.acquire()
         if game.get_nof_players() == 0: # Not worth sending it, when no clients are connected
+            logging.debug("Waiting a player to join")
             game.cv_create_player.wait()
 
+        logging.debug("Got a player!")
         cv.acquire()
         queue.put(common.marshal(
             common.CTRL_BRDCAST_MSG,
@@ -187,9 +195,7 @@ if __name__ == '__main__':
         cv.notify_all()
         cv.release()
         game.cv_create_player.release()
-        time.sleep(5)
-
-
+        #time.sleep(5)
 
     #board = game.create_board()
 
@@ -206,4 +212,3 @@ if __name__ == '__main__':
 
     #print(board_array.shape)
     #board.print_board()
-
