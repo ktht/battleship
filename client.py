@@ -15,7 +15,7 @@ cv = threading.Condition()
 cv_init = threading.Condition()
 
 # Game-specific variables ----------------------------------------
-temp_dict  = {}
+available_servers  = []
 game_board = []
 BOARD_WIDTH  = 10
 BOARD_HEIGHT = 10
@@ -26,11 +26,11 @@ BOARD_HEIGHT = 10
 
 # Indirect communication channels --------------------------------
 server_list_con = pika.BlockingConnection(
-    pika.ConnectionParameters(host='localhost')
+    pika.ConnectionParameters(host = 'localhost')
 )
 #server_list_con.add_timeout(5, testing)
 server_bcasts_con = pika.BlockingConnection(
-    pika.ConnectionParameters(host='localhost')
+    pika.ConnectionParameters(host = 'localhost')
 )
 server_list_ch   = server_list_con.channel()
 server_bcasts_ch = server_bcasts_con.channel()
@@ -45,16 +45,17 @@ class TimedSet(set):
         self.__table = {}
 
     def add(self, item, timeout = 7):
-        self.__table[item] = time.time() + timeout
-        set.add(self, item)
+        server_name, nof_clients = item.split(':')
+        self.__table[server_name] = [nof_clients, time.time() + timeout]
+        set.add(self, server_name)
 
     def __contains__(self, item):
-        return time.time() < self.__table.get(item)
+        return time.time() < self.__table.get(item)[1]
 
     def __iter__(self):
         for item in set.__iter__(self):
-            if time.time() < self.__table.get(item):
-                yield item
+            if time.time() < self.__table.get(item)[1]:
+                yield (item, self.__table.get(item)[0])
 
 def listen_public_announcements():
     server_list_ch.exchange_declare(
@@ -115,19 +116,22 @@ def public_announc_callback(ch, method, properties, body):
         if counter >= 1:
             counter = 0
             initialization_phase = False
-            cv_init.acquire()
-            cv_init.notify_all()
-            cv_init.release()
             common.clear_screen()
             print('Available servers and number of clients connected:')
             for t in t_set:
-                print(t)
-                global temp_dict
-                temp_dict[t] = []
-            if common.query_yes_no("Would you like to update the list?"):
+                print("{server_name}: {nof_clients} client(s)".format(
+                    server_name = t[0],
+                    nof_clients = t[1]
+                ))
+                global available_servers
+                available_servers.append(t[0])
+            if common.query_yes_no("Would you like to update the list?", default = "no"):
                 print('Updating...')
                 initialization_phase = True
             else:
+                cv_init.acquire()
+                cv_init.notify_all()
+                cv_init.release()
                 server_list_con.close()
 
 def server_bcasts_callback(ch, method, properties, body):
@@ -200,15 +204,16 @@ def do_rpc():
         cv.release()
 
 def authenticate():
-    global temp_dict, GAME_SERVER_NAME
+    global available_servers, GAME_SERVER_NAME
     boolean = True
     while boolean:
         server_name = raw_input('\nEnter the name of the server you want to connect to: ')
-        for s in temp_dict:
-            if str(server_name) in str(s):
-                boolean = False
-                temp_dict.clear()
-                break
+        if server_name in available_servers:
+            boolean = False
+            del available_servers[:]
+            break
+        else:
+            print("Incorrect server name")
 
     GAME_SERVER_NAME = server_name
     common.clear_screen()
@@ -258,9 +263,6 @@ if __name__ == '__main__':
         else:
             break
     cv_init.release()
-
-    #get_servers_list_th.join() # After server has been chosen, this thread stops
-    #print "joined"
 
     u_name, player_id = authenticate()
     print('Hello, {username}! You have connected succesfully!'.format(username = u_name))
