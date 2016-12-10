@@ -16,13 +16,34 @@ l_adduser = threading.Lock()
 
 # Indirect communication channels ---------------------------------------------
 announc_con = pika.BlockingConnection(
-    pika.ConnectionParameters(host = 'localhost')
+    pika.ConnectionParameters(
+        host = common.host,
+        port = common.port,
+        credentials = pika.PlainCredentials(
+            username = common.mquser,
+            password = common.mqpwd,
+        ),
+    )
 )
 bcast_con = pika.BlockingConnection(
-    pika.ConnectionParameters(host = 'localhost')
+    pika.ConnectionParameters(
+        host = common.host,
+        port = common.port,
+        credentials = pika.PlainCredentials(
+            username = common.mquser,
+            password = common.mqpwd,
+        ),
+    )
 )
 rpc_con = pika.BlockingConnection(
-    pika.ConnectionParameters(host = 'localhost')
+    pika.ConnectionParameters(
+        host = common.host,
+        port = common.port,
+        credentials = pika.PlainCredentials(
+            username = common.mquser,
+            password = common.mqpwd,
+        ),
+    )
 )
 announc_ch = announc_con.channel()
 bcast_ch   = bcast_con.channel()

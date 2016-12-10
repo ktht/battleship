@@ -13,6 +13,7 @@ cv = threading.Condition()
 cv_init = threading.Condition()
 start_t = 0
 server_list_timeout = 6
+client_name = ''
 
 # Game-specific variables ----------------------------------------
 available_servers  = []
@@ -21,13 +22,38 @@ player_hits_board = []
 
 # Indirect communication channels --------------------------------
 server_list_con = pika.BlockingConnection(
-    pika.ConnectionParameters(host = 'localhost')
+    pika.ConnectionParameters(
+        host = common.host,
+        port = common.port,
+        credentials = pika.PlainCredentials(
+            username = common.mquser,
+            password = common.mqpwd,
+        ),
+    )
 )
 server_bcasts_con = pika.BlockingConnection(
-    pika.ConnectionParameters(host = 'localhost')
+    pika.ConnectionParameters(
+        host = common.host,
+        port = common.port,
+        credentials = pika.PlainCredentials(
+            username = common.mquser,
+            password = common.mqpwd,
+        ),
+    )
 )
-server_list_ch   = server_list_con.channel()
-server_bcasts_ch = server_bcasts_con.channel()
+client_keepalive_con = pika.BlockingConnection(
+    pika.ConnectionParameters(
+        host = common.host,
+        port = common.port,
+        credentials = pika.PlainCredentials(
+            username = common.mquser,
+            password = common.mqpwd,
+        ),
+    )
+)
+server_list_ch      = server_list_con.channel()
+server_bcasts_ch    = server_bcasts_con.channel()
+client_keepalive_ch = client_keepalive_con.channel()
 
 class TimedSet(set):
     '''Set class with timed autoremoving of elements
@@ -95,6 +121,29 @@ def listen_server_bcasts():
         no_ack = True
     )
     server_bcasts_ch.start_consuming()
+
+def send_keepalive():
+    i = 0
+    global global_bool
+    global client_name
+    global GAME_SERVER_NAME
+
+    client_keepalive_ch.exchange_declare(
+        exchange  = 'keepalive',
+        type      = 'direct',
+        arguments = { 'x-message-ttl': 5000 }
+    )
+
+    while not global_bool:
+        i += 1
+        time.sleep(5)
+        msg = '{client_name}'.format(client_name = client_name)
+        client_keepalive_ch.basic_publish(
+            exchange    = 'keepalive',
+            routing_key = '{server_name}_watchdog'.format(server_name = GAME_SERVER_NAME),
+            body        = msg,
+        )
+        logging.debug('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
 
 def public_announc_callback(ch, method, properties, body):
     t_set.add(body)
@@ -195,7 +244,14 @@ def server_bcasts_callback(ch, method, properties, body):
 class RpcClient(object):
     def __init__(self):
         self.rpc_con = pika.BlockingConnection(
-            pika.ConnectionParameters(host = 'localhost')
+            pika.ConnectionParameters(
+                host = common.host,
+                port = common.port,
+                credentials = pika.PlainCredentials(
+                    username = common.mquser,
+                    password = common.mqpwd,
+                ),
+            )
         )
         self.rpc_ch         = self.rpc_con.channel()
         self.rpc_result     = self.rpc_ch.queue_declare(exclusive=True)
@@ -286,6 +342,16 @@ def authenticate():
         else:
             boolean = True
             common.clear_screen()
+
+    global client_name
+    client_name = u_name
+
+    keepalive_thread = threading.Thread(
+        target = send_keepalive,
+        name   = 'Client_keepalive'
+    )
+    keepalive_thread.setDaemon(True)
+    keepalive_thread.start()
 
     return u_name, player_id
 

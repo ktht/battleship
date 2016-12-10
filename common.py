@@ -1,5 +1,10 @@
 import logging, functools, os, string, sys
 
+# Connection parameters -----------------------------
+host = 'localhost'
+port = 5672
+mquser = 'guest'
+mqpwd  = 'guest'
 
 # Glboal constants ----------------------------------
 CTRL_REQ_ID         = int(55)
