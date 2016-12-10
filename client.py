@@ -210,9 +210,7 @@ def server_bcasts_callback(ch, method, properties, body):
     if CTRL_CODE == common.CTRL_BRDCAST_MSG:
         print(msg[1])
     elif CTRL_CODE == common.CTRL_START_GAME:
-        #board = common.unmarshal(rpc_client.call(common.marshal(common.CTRL_REQ_BOARD)))
         board = rpc_client.call_mum(common.CTRL_REQ_BOARD)
-        #print('Board... \n'+str(board))
         global player_ships_board, player_hits_board
         player_ships_board = process_board(board[0], int(board[1]) ,int(board[2]))
         player_hits_board = np.full((int(board[1]), int(board[2])), '-', dtype=str)
@@ -220,11 +218,7 @@ def server_bcasts_callback(ch, method, properties, body):
     elif CTRL_CODE == common.CTRL_SIGNAL_PL_TURN:
         if int(msg[1]) == player_id:
             x, y = get_coords()
-            #print(x)
-            #print(y)
             if x != common.CTRL_HIT_TIMEOUT and y != common.CTRL_HIT_TIMEOUT: # In case of timeout not worth doing RPC
-                #print(common.marshal(common.CTRL_HIT_SHIP, player_id, x, y))
-                #hit = int(common.unmarshal(rpc_client.call(common.marshal(common.CTRL_HIT_SHIP, player_id, x, y)))[0])
                 hit = int(rpc_client.call_mum(common.CTRL_HIT_SHIP, player_id, x, y)[0])
                 if int(hit) == common.CTRL_ERR_HIT:
                     print('Entered coordinates were invalid.')
@@ -232,9 +226,15 @@ def server_bcasts_callback(ch, method, properties, body):
                     if int(hit) == 0:
                         player_hits_board[x][y] = 'O'
                     else: player_hits_board[x][y] = 'X'
-                #print(x, y, hit)
             common.clear_screen()
             common.print_board(player_ships_board, player_hits_board)
+    elif CTRL_CODE == common.CTRL_NOTIFY_HIT:
+        if int(msg[1]) == player_id: # Id of player who got hit
+                player_ships_board[int(msg[2])][int(msg[3])] = '*'
+                common.clear_screen()
+                common.print_board(player_ships_board, player_hits_board)
+                print('Oh noes, you\'ve been hit by {bomber}!'.format(bomber=str(msg[4])))
+
     else:
         cv.acquire()
         queue.put(body)
@@ -286,22 +286,6 @@ class RpcClient(object):
     @common.marshal_decorator
     def call_mum(self, *args):
         return self.call(*args)
-
-def do_rpc():
-    while is_alive:
-        cv.acquire()
-        if queue.qsize() == 0:
-            cv.wait()
-        try:
-            msg = queue.get(0)
-            pcs = msg.split(':')
-            if pcs[1] == 1:
-                coords = raw_input('Enter the coords you want to hit: ')
-            print("This got put into the queue: " + str(msg))
-
-        except Queue.Empty:
-            pass
-        cv.release()
 
 def authenticate():
     global available_servers, GAME_SERVER_NAME
@@ -376,11 +360,8 @@ if __name__ == '__main__':
         target = listen_server_bcasts,
         name   = 'Listen_Server_Bcasts'
     )
-    rpc_thread = threading.Thread(
-        target = do_rpc,
-        name   = 'RPC_Handling'
-    )
-    threads = [rpc_thread, listen_server_bcasts_th, get_servers_list_th]
+
+    threads = [listen_server_bcasts_th, get_servers_list_th]
     for t in threads:
         t.setDaemon(True)
 
@@ -400,11 +381,6 @@ if __name__ == '__main__':
     u_name, player_id = authenticate()
     print('Hello, {username}! You have connected succesfully!'.format(username = u_name))
 
-    # If is admin: - start new game
-    #board_w_shape = rpc_client.call(':'.join((str(player_id), str(CTRL_REQ_BOARD))))
-    #board, shapex, shapey = board_w_shape.split(':')
-    #print(np.fromstring(board, dtype=int).reshape(int(shapex), int(shapey)))
-
     listen_server_bcasts_th.start()
 
     try:
@@ -419,9 +395,7 @@ if __name__ == '__main__':
         print("Bye bye")
         sys.exit(1)
 
-    #rpc_thread.start()
     while not global_bool:
         time.sleep(0.2)
-    #print('Exited while loop')
-    #rpc_thread.join()
+
     listen_server_bcasts_th.join()

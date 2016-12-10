@@ -141,19 +141,14 @@ class Board(object):
 
     def hit_ship(self, row, column, id):
         value = self.board[row][column]
-        #print('Value is!')
-        #print(value)
         if str(value).startswith(str(id)):
-            #print('Starts with id!')
-            return 0
+            return 0, 0
         if value < 99:
-            #if value != 0:
-                #self.score[value] += 100
             value += 100 # Adds 10 to the field value when it has been hit for the first time
             self.board[row][column] = value
         if value-100 == 0:
-            return 0
-        else: return 1
+            return 0, 0
+        else: return 1, str(value-100)[0]
         #return value - 100 # Returns the unmodified field value
 
     def get_board(self):

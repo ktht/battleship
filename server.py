@@ -148,6 +148,13 @@ def start_game(player_id):
             return common.CTRL_OK
     return common.CTRL_NOT_ADMIN
 
+def inform_other_clients(x, y, sufferer_id, bomber_id):
+    bomber_name = game.players[int(bomber_id)-1].get_name()
+    cv.acquire()
+    queue.put(common.marshal(common.CTRL_NOTIFY_HIT, sufferer_id, x, y, bomber_name))
+    cv.notify_all()
+    cv.release()
+
 def on_request(ch, method, props, body):
     request = common.unmarshal(body)
     CTRL_CODE = int(request[0])
@@ -158,9 +165,11 @@ def on_request(ch, method, props, body):
         response = start_game(request[1])
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board_array = board.get_board()  # Array needed to send board to client
-        #print(board_array)
         board_shape = board_array.shape
-        print(board_shape)
+        time.sleep(0.1)
+        #print(board_array)
+        #print(board_shape)
+        #print(props.reply_to)
         response = common.marshal(board_array.tostring(), board_shape[0], board_shape[1])
     elif CTRL_CODE == common.CTRL_HIT_SHIP:
         global entered_correct_coords, stop_loop, player_has_hit
@@ -170,12 +179,13 @@ def on_request(ch, method, props, body):
             stop_loop = True
         else:
             try:
-                response = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
+                response, suffer_id = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
                 entered_correct_coords = True
+                if int(response) == 1: # In case someone got hit, let him know
+                    inform_other_clients(request[2], request[3], suffer_id, request[1])
             except Exception:
                 response = common.CTRL_ERR_HIT
             player_has_hit = True
-        #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
     ch.basic_publish(
         exchange    = '',
@@ -264,19 +274,3 @@ if __name__ == '__main__':
                     stop_loop = False
     except KeyboardInterrupt:
         is_running = False
-
-    #board = game.create_board()
-
-    #game.populate_board(board)
-    #board.print_board()
-
-    #t.join()
-
-    #board_array = board.get_board() # Stuff for sending the board to client
-    #board_shape = board_array.shape
-    #f = board_array.tostring()
-    #print(np.fromstring(f, dtype=int).reshape(board_shape))
-    # system('cls' if name == 'nt' else 'clear')
-
-    #print(board_array.shape)
-    #board.print_board()

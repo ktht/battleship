@@ -21,6 +21,7 @@ CTRL_BRDCAST_MSG    = int(30)
 CTRL_SIGNAL_PL_TURN = int(50)
 CTRL_HIT_TIMEOUT    = int(70)
 CTRL_ERR_HIT        = int(80)
+CTRL_NOTIFY_HIT     = int(90)
 DATABASE_FILE_NAME  = "users.db"
 
 def clear_screen():
@@ -41,13 +42,13 @@ def marshal_decorator(func):
 
 def print_board(board, board2):
     counter = 0
-    print('      ' + ' '.join('%-3s' % i for i in range(1, board.shape[1] + 1))+' '*10),  # Column numbering
+    print('      ' + ' '.join('%-3s' % i for i in range(1, board.shape[1] + 1))+' '*4),  # Column numbering
     print('      ' + ' '.join('%-3s' % i for i in range(1, board.shape[1] + 1)))
-    print('   ' + '-' * 4 * board.shape[1]+' '*12),  # Line between board and colum  numbers
+    print('   ' + '-' * 4 * board.shape[1]+' '*6),  # Line between board and colum  numbers
     print('   ' + '-' * 4 * board.shape[1])
     second_board = zip(string.ascii_uppercase[:board2.shape[0]],board2)
     for row_label, row in zip(string.ascii_uppercase[:board.shape[0]],board):  # Board with row numbering
-        print '%-3s|  %s' % (row_label, ' '.join('%-3s' % i for i in row))+' '*10,
+        print '%-3s|  %s' % (row_label, ' '.join('%-3s' % i for i in row))+' '*4,
         print '%-3s|  %s' % (second_board[counter][0], ' '.join('%-3s' % i for i in second_board[counter][1]))
         counter += 1
 
