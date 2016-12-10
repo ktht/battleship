@@ -6,10 +6,12 @@ SERVER_NAME = 'Server'
 board = []
 
 # Synchronization primitives --------------------------------------------------
-is_running        = True
-game_not_started  = True
-game_not_finished = True
-player_has_hit    = False
+is_running             = True
+game_not_started       = True
+game_not_finished      = True
+player_has_hit         = False
+entered_correct_coords = False
+stop_loop              = False
 queue = Queue.Queue()
 cv = threading.Condition()
 l_adduser = threading.Lock()
@@ -161,12 +163,17 @@ def on_request(ch, method, props, body):
         print(board_shape)
         response = common.marshal(board_array.tostring(), board_shape[0], board_shape[1])
     elif CTRL_CODE == common.CTRL_HIT_SHIP:
+        global entered_correct_coords, stop_loop, player_has_hit
+        entered_correct_coords = False
         if int(request[2]) == common.CTRL_ERR_HIT or int(request[3]) == common.CTRL_ERR_HIT:
             response = common.CTRL_ERR_HIT
+            stop_loop = True
         else:
-            response = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
-            #print('Response is:' +str(response))
-            global player_has_hit
+            try:
+                response = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
+                entered_correct_coords = True
+            except Exception:
+                response = common.CTRL_ERR_HIT
             player_has_hit = True
         #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
@@ -241,14 +248,20 @@ if __name__ == '__main__':
     try:
         while game_not_finished:
             for player in game.players:
-                cv.acquire()
-                queue.put(common.marshal(common.CTRL_SIGNAL_PL_TURN, player.get_id()))
-                cv.notify_all()
-                cv.release()
-                start = time.time()
-                while not player_has_hit and time.time()-start<30:
-                    time.sleep(0.5)
-                player_has_hit = False
+                entered_correct_coords = False
+                while not entered_correct_coords:
+                    stop_loop = False
+                    cv.acquire()
+                    queue.put(common.marshal(common.CTRL_SIGNAL_PL_TURN, player.get_id()))
+                    cv.notify_all()
+                    cv.release()
+                    start = time.time()
+                    while not player_has_hit and time.time()-start<30 and not stop_loop:
+                        time.sleep(0.5)
+                        if time.time()-start>30:
+                            entered_correct_coords = True
+                    player_has_hit = False
+                    stop_loop = False
     except KeyboardInterrupt:
         is_running = False
 
