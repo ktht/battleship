@@ -251,7 +251,11 @@ def authenticate():
     global available_servers, GAME_SERVER_NAME
     boolean = True
     while boolean:
-        server_name = raw_input('Enter the name of the server you want to connect to: ')
+        try:
+            server_name = raw_input('Enter the name of the server you want to connect to: ')
+        except KeyboardInterrupt:
+            print("Bye bye")
+            sys.exit(1)
         if server_name in available_servers:
             boolean = False
             del available_servers[:]
@@ -264,10 +268,14 @@ def authenticate():
 
     print('Connected to {game_server_name}'.format(game_server_name = GAME_SERVER_NAME))
     while not boolean:
-        u_name = raw_input("Enter your username: ")
-        #pwd    = getpass.getpass("Enter your password: ")
-        pwd = raw_input("Enter your password: ")
-        #player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
+        try:
+            u_name = raw_input("Enter your username: ")
+            #pwd    = getpass.getpass("Enter your password: ")
+            pwd = raw_input("Enter your password: ")
+            #player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
+        except KeyboardInterrupt:
+            print("Bye bye")
+            sys.exit(1)
         player_id = int(rpc_client.call_mum(common.CTRL_REQ_ID, u_name, pwd)[0])
         if player_id == common.CTRL_ERR_DB:
             print('This username is taken or you entered a wrong password, please try again.')
@@ -312,11 +320,15 @@ if __name__ == '__main__':
 
     cv_init.acquire()
     get_servers_list_th.start()
-    while True:
-        if initialization_phase:
-            cv_init.wait(timeout = 10)
-        else:
-            break
+    try:
+        while True:
+            if initialization_phase:
+                cv_init.wait(timeout = 10)
+            else:
+                break
+    except KeyboardInterrupt:
+        print "Bye bye"
+        sys.exit(1)
     cv_init.release()
 
     u_name, player_id = authenticate()
@@ -329,17 +341,21 @@ if __name__ == '__main__':
 
     listen_server_bcasts_th.start()
 
-    if player_id == 1:  # Admin has player id 1
-        game_not_started = True
-        while game_not_started:
-            if common.query_yes_no("Do you want to start the game?"):
-                #rpc_client.call(common.marshal(common.CTRL_START_GAME, player_id))
-                rpc_client.call_mum(common.CTRL_START_GAME, player_id)
-                game_not_started = False
+    try:
+        if player_id == 1:  # Admin has player id 1
+            game_not_started = True
+            while game_not_started:
+                if common.query_yes_no("Do you want to start the game?"):
+                    #rpc_client.call(common.marshal(common.CTRL_START_GAME, player_id))
+                    rpc_client.call_mum(common.CTRL_START_GAME, player_id)
+                    game_not_started = False
+    except KeyboardInterrupt:
+        print("Bye bye")
+        sys.exit(1)
 
     #rpc_thread.start()
     while not global_bool:
         time.sleep(0.2)
-    print('Exited while loop')
-    rpc_thread.join()
+    #print('Exited while loop')
+    #rpc_thread.join()
     listen_server_bcasts_th.join()
