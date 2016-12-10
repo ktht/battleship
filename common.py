@@ -28,6 +28,12 @@ def marshal(*args):
 def unmarshal(*args):
     return args[0].split(':')
 
+def marshal_decorator(func):
+    @functools.wraps(func)
+    def decorated(self, *args):
+        return unmarshal(func(self, marshal(*args)))
+    return decorated
+
 def print_board(board, board2):
     counter = 0
     print('      ' + ' '.join('%-3s' % i for i in range(1, board.shape[1] + 1))+' '*10),  # Column numbering

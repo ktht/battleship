@@ -161,7 +161,8 @@ def server_bcasts_callback(ch, method, properties, body):
     if CTRL_CODE == common.CTRL_BRDCAST_MSG:
         print(msg[1])
     elif CTRL_CODE == common.CTRL_START_GAME:
-        board = common.unmarshal(rpc_client.call(common.marshal(common.CTRL_REQ_BOARD)))
+        #board = common.unmarshal(rpc_client.call(common.marshal(common.CTRL_REQ_BOARD)))
+        board = rpc_client.call_mum(common.CTRL_REQ_BOARD)
         #print('Board... \n'+str(board))
         global player_ships_board, player_hits_board
         player_ships_board = process_board(board[0], int(board[1]) ,int(board[2]))
@@ -174,7 +175,8 @@ def server_bcasts_callback(ch, method, properties, body):
             #print(y)
             if x != common.CTRL_HIT_TIMEOUT and y != common.CTRL_HIT_TIMEOUT: # In case of timeout not worth doing RPC
                 #print(common.marshal(common.CTRL_HIT_SHIP, player_id, x, y))
-                hit = int(common.unmarshal(rpc_client.call(common.marshal(common.CTRL_HIT_SHIP, player_id, x, y)))[0])
+                #hit = int(common.unmarshal(rpc_client.call(common.marshal(common.CTRL_HIT_SHIP, player_id, x, y)))[0])
+                hit = int(rpc_client.call_mum(common.CTRL_HIT_SHIP, player_id, x, y)[0])
                 if int(hit) == common.CTRL_ERR_HIT:
                     print('Entered coordinates were invalid.')
                 else:
@@ -225,6 +227,10 @@ class RpcClient(object):
             self.rpc_con.process_data_events()
         return self.response
 
+    @common.marshal_decorator
+    def call_mum(self, *args):
+        return self.call(*args)
+
 def do_rpc():
     while is_alive:
         cv.acquire()
@@ -261,7 +267,8 @@ def authenticate():
         u_name = raw_input("Enter your username: ")
         #pwd    = getpass.getpass("Enter your password: ")
         pwd = raw_input("Enter your password: ")
-        player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
+        #player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
+        player_id = int(rpc_client.call_mum(common.CTRL_REQ_ID, u_name, pwd)[0])
         if player_id == common.CTRL_ERR_DB:
             print('This username is taken or you entered a wrong password, please try again.')
         elif player_id == common.CTRL_ERR_MAX_PL:
@@ -326,7 +333,8 @@ if __name__ == '__main__':
         game_not_started = True
         while game_not_started:
             if common.query_yes_no("Do you want to start the game?"):
-                rpc_client.call(common.marshal(common.CTRL_START_GAME, player_id))
+                #rpc_client.call(common.marshal(common.CTRL_START_GAME, player_id))
+                rpc_client.call_mum(common.CTRL_START_GAME, player_id)
                 game_not_started = False
 
     #rpc_thread.start()
