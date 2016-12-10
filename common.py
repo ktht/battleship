@@ -13,6 +13,9 @@ CTRL_NOT_ADMIN      = int(62)
 CTRL_ERR_LOGGED_IN  = int(63)
 CTRL_OK             = int(40)
 CTRL_BRDCAST_MSG    = int(30)
+CTRL_SIGNAL_PL_TURN = int(50)
+CTRL_HIT_TIMEOUT    = int(70)
+CTRL_ERR_HIT        = int(80)
 DATABASE_FILE_NAME  = "users.db"
 
 def clear_screen():

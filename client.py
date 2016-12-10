@@ -1,10 +1,11 @@
-import pika, logging, uuid, threading, time, Queue, common, getpass, sys, numpy as np
+import pika, logging, uuid, threading, time, Queue, common, getpass, sys, select, string,  numpy as np
 
 # Global constants -----------------------------------------------
 GAME_SERVER_NAME = 'Server'
 
 # Synchronization primitives -------------------------------------
 global_bool = False
+os_linux = True
 initialization_phase = True
 is_alive = True
 queue = Queue.Queue()
@@ -137,6 +138,23 @@ def process_board(board, height, width):
         else: game_board[index] = x[1:]
     return game_board
 
+def get_coords():
+    if os_linux:
+        print "Enter the coords you want to hit! (ex a2) You have 25 seconds!:"
+        i, o, e = select.select([sys.stdin], [], [], 25)
+        if (i):
+            coords =  sys.stdin.readline().strip()
+        else: coords = None
+    if coords == None:
+        return common.CTRL_HIT_TIMEOUT, common.CTRL_HIT_TIMEOUT
+    try:
+        x = int(string.lowercase.index(coords[0].lower()))
+        y = int(str(coords)[1:])-1
+    except Exception:
+        return common.CTRL_ERR_HIT, common.CTRL_ERR_HIT
+    return x, y
+
+
 def server_bcasts_callback(ch, method, properties, body):
     msg = common.unmarshal(body)
     CTRL_CODE = int(msg[0])
@@ -144,11 +162,28 @@ def server_bcasts_callback(ch, method, properties, body):
         print(msg[1])
     elif CTRL_CODE == common.CTRL_START_GAME:
         board = common.unmarshal(rpc_client.call(common.marshal(common.CTRL_REQ_BOARD)))
+        #print('Board... \n'+str(board))
         global player_ships_board, player_hits_board
         player_ships_board = process_board(board[0], int(board[1]) ,int(board[2]))
         player_hits_board = np.full((int(board[1]), int(board[2])), '-', dtype=str)
         common.print_board(player_ships_board, player_hits_board)
-        #common.print_board(player_hits_board)
+    elif CTRL_CODE == common.CTRL_SIGNAL_PL_TURN:
+        if int(msg[1]) == player_id:
+            x, y = get_coords()
+            #print(x)
+            #print(y)
+            if x != common.CTRL_HIT_TIMEOUT and y != common.CTRL_HIT_TIMEOUT: # In case of timeout not worth doing RPC
+                #print(common.marshal(common.CTRL_HIT_SHIP, player_id, x, y))
+                hit = int(common.unmarshal(rpc_client.call(common.marshal(common.CTRL_HIT_SHIP, player_id, x, y)))[0])
+                if int(hit) == common.CTRL_ERR_HIT:
+                    print('Entered coordinates were invalid.')
+                else:
+                    if int(hit) == 0:
+                        player_hits_board[x][y] = 'O'
+                    else: player_hits_board[x][y] = 'X'
+                #print(x, y, hit)
+            common.clear_screen()
+            common.print_board(player_ships_board, player_hits_board)
     else:
         cv.acquire()
         queue.put(body)
@@ -224,8 +259,8 @@ def authenticate():
     print('Connected to {game_server_name}'.format(game_server_name = GAME_SERVER_NAME))
     while not boolean:
         u_name = raw_input("Enter your username: ")
-        pwd    = getpass.getpass("Enter your password: ")
-        #pwd = raw_input("Enter your password: ")
+        #pwd    = getpass.getpass("Enter your password: ")
+        pwd = raw_input("Enter your password: ")
         player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
         if player_id == common.CTRL_ERR_DB:
             print('This username is taken or you entered a wrong password, please try again.')
@@ -239,7 +274,9 @@ def authenticate():
 
     return u_name, player_id
 
+
 if __name__ == '__main__':
+
     logging.basicConfig(
         level  = logging.CRITICAL,
         format = '[%(asctime)s] [%(threadName)s] [%(module)s:%(funcName)s:%(lineno)d] [%(levelname)s] -- %(message)s',

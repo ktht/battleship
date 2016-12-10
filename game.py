@@ -40,18 +40,18 @@ class BattleShips(object):
             return -1, common.CTRL_ERR_MAX_PL
         return self.new_player.get_id(), common.CTRL_OK
 
-    def create_board(self):
+    def create_and_populate_board(self):
         global BOARD_HEIGHT, BOARD_WIDTH
         BOARD_HEIGHT = int(np.rint(np.sqrt(40*len(self.players))))
         BOARD_WIDTH = BOARD_HEIGHT + 1
-        return Board(NO_SHIPS_MARK)
-
-    def populate_board(self, board):
+        board =  Board(NO_SHIPS_MARK)
         for player in self.players:
             for ship in ships:
                 board.bool = False
                 while not board.bool:
                     board.ship_placement(ships[ship], player.id)
+        return board
+
 
     def user_exists(self, name):
         return any(map(lambda x: x.get_name() == name, self.players))
@@ -139,14 +139,22 @@ class Board(object):
                 self.bool = False
 
 
-    def hit_ship(self, row, column):
-        value = self.board[row-1][column-1]
+    def hit_ship(self, row, column, id):
+        value = self.board[row][column]
+        #print('Value is!')
+        #print(value)
+        if str(value).startswith(str(id)):
+            #print('Starts with id!')
+            return 0
         if value < 99:
             #if value != 0:
                 #self.score[value] += 100
             value += 100 # Adds 10 to the field value when it has been hit for the first time
-            self.board[row - 1][column - 1] = value
-        return value - 100 # Returns the unmodified field value
+            self.board[row][column] = value
+        if value-100 == 0:
+            return 0
+        else: return 1
+        #return value - 100 # Returns the unmodified field value
 
     def get_board(self):
         return self.board

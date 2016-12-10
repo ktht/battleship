@@ -3,10 +3,13 @@ from db import db
 
 # Global constants ------------------------------------------------------------
 SERVER_NAME = 'Server'
+board = []
 
 # Synchronization primitives --------------------------------------------------
-is_running       = True
-game_not_started = True
+is_running        = True
+game_not_started  = True
+game_not_finished = True
+player_has_hit    = False
 queue = Queue.Queue()
 cv = threading.Condition()
 l_adduser = threading.Lock()
@@ -112,8 +115,7 @@ def start_game(player_id):
     for player in game.players:
         if int(player.get_id()) == int(player_id) and player.is_admin():
             global board
-            board = game.create_board()  # Creates and populates the board after admin starts the game
-            game.populate_board(board)
+            board = game.create_and_populate_board()  # Creates and populates the board after admin starts the game
             cv.acquire()
             queue.put(common.marshal(common.CTRL_START_GAME, common.CTRL_ALL_PLAYERS))
             cv.notify_all()
@@ -133,9 +135,18 @@ def on_request(ch, method, props, body):
         response = start_game(request[1])
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board_array = board.get_board()  # Array needed to send board to client
-        print(board_array)
+        #print(board_array)
         board_shape = board_array.shape
+        print(board_shape)
         response = common.marshal(board_array.tostring(), board_shape[0], board_shape[1])
+    elif CTRL_CODE == common.CTRL_HIT_SHIP:
+        if int(request[2]) == common.CTRL_ERR_HIT or int(request[3]) == common.CTRL_ERR_HIT:
+            response = common.CTRL_ERR_HIT
+        else:
+            response = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
+            #print('Response is:' +str(response))
+            global player_has_hit
+            player_has_hit = True
         #print(np.fromstring(f, dtype=int).reshape(board_shape))
 
     ch.basic_publish(
@@ -148,7 +159,6 @@ def on_request(ch, method, props, body):
 
 
 def game_session():
-
     rpc_ch.basic_qos(prefetch_count = 1)
     rpc_ch.basic_consume(on_request, queue = 'rpc_queue')
     try:
@@ -207,8 +217,20 @@ if __name__ == '__main__':
         logging.debug("Bye bye")
     logging.debug("Exiting initial loop")
 
-    while True:
-        time.sleep(0.5)
+    try:
+        while game_not_finished:
+            for player in game.players:
+                cv.acquire()
+                queue.put(common.marshal(common.CTRL_SIGNAL_PL_TURN, player.get_id()))
+                cv.notify_all()
+                cv.release()
+                start = time.time()
+                while not player_has_hit and time.time()-start<30:
+                    time.sleep(0.5)
+                player_has_hit = False
+    except KeyboardInterrupt:
+        is_running = False
+
     #board = game.create_board()
 
     #game.populate_board(board)
