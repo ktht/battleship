@@ -143,8 +143,8 @@ def send_keepalive():
             routing_key = '{server_name}_watchdog'.format(server_name = GAME_SERVER_NAME),
             body        = msg,
         )
-        #logging.debug('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
-        print('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
+        logging.debug('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
+        #print('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
 
 def public_announc_callback(ch, method, properties, body):
     t_set.add(body)
@@ -273,7 +273,7 @@ class RpcClient(object):
         self.corr_id = str(uuid.uuid4())
         self.rpc_ch.basic_publish(
             exchange    = '',
-            routing_key = 'rpc_queue',
+            routing_key ='{server_name}_rpc_queue'.format(server_name=GAME_SERVER_NAME),
             properties  = pika.BasicProperties(
                 reply_to       = self.callback_queue,
                 correlation_id = self.corr_id,
@@ -288,7 +288,7 @@ class RpcClient(object):
     def call_mum(self, *args):
         return self.call(*args)
 
-def authenticate():
+def choose_server():
     global available_servers, GAME_SERVER_NAME
     boolean = True
     while boolean:
@@ -307,6 +307,8 @@ def authenticate():
     GAME_SERVER_NAME = server_name
     common.clear_screen()
 
+def authenticate():
+    boolean = False
     print('Connected to {game_server_name}'.format(game_server_name = GAME_SERVER_NAME))
     while not boolean:
         try:
@@ -349,7 +351,6 @@ if __name__ == '__main__':
         stream = sys.stdout
     )
 
-    rpc_client = RpcClient()
     t_set = TimedSet()
 
     game_board = []
@@ -379,8 +380,11 @@ if __name__ == '__main__':
         sys.exit(1)
     cv_init.release()
 
-    u_name, player_id = authenticate()
+    choose_server() # First choose server
+    rpc_client = RpcClient() # Then create rpc queue, using server name
+    u_name, player_id = authenticate() # Get u_name, id, using rpc
     print('Hello, {username}! You have connected succesfully!'.format(username = u_name))
+
 
     listen_server_bcasts_th.start()
 

@@ -2,7 +2,7 @@ import time, pika, threading, game, common, Queue, logging, sys
 from db import db
 
 # Global constants ------------------------------------------------------------
-SERVER_NAME = 'Server'
+SERVER_NAME = 'Server3'
 board = []
 
 # Synchronization primitives --------------------------------------------------
@@ -72,7 +72,7 @@ announc_ch.exchange_declare(
     type      = 'fanout',
     arguments = { 'x-message-ttl' : 5000 }
 )
-rpc_ch.queue_declare(queue = 'rpc_queue')
+rpc_ch.queue_declare(queue = '{server_name}_rpc_queue'.format(server_name=SERVER_NAME))
 
 class TimedSet(set):
     '''Set class with timed autoremoving of elements
@@ -224,7 +224,8 @@ def on_request(ch, method, props, body):
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board_array = board.get_board()  # Array needed to send board to client
         board_shape = board_array.shape
-        time.sleep(0.1)
+        string_array = board_array.tostring()
+        #time.sleep(0.2)
         #print(board_array)
         #print(board_shape)
         #print(props.reply_to)
@@ -256,7 +257,7 @@ def on_request(ch, method, props, body):
 
 def game_session():
     rpc_ch.basic_qos(prefetch_count = 1)
-    rpc_ch.basic_consume(on_request, queue = 'rpc_queue')
+    rpc_ch.basic_consume(on_request, queue = '{server_name}_rpc_queue'.format(server_name=SERVER_NAME))
     try:
         logging.info("Awaiting RPC requests")
         rpc_ch.start_consuming()
@@ -313,6 +314,7 @@ if __name__ == '__main__':
             cv.release()
     except KeyboardInterrupt:
         is_running = False
+        game_not_finished = False
         logging.debug("Bye bye")
     logging.debug("Exiting initial loop")
 
