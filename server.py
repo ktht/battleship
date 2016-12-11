@@ -248,8 +248,6 @@ def inform_sunken_ship(pl_id, ship_id):
         queue.put(common.marshal(common.CTRL_SHIP_SUNKEN, index[0], index[1], pl_id))
         cv.notify_all()
         cv.release()
-        print(index[0])
-        print(index[1])
 
 def on_request(ch, method, props, body):
     request = common.unmarshal(body)

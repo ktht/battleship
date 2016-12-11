@@ -146,7 +146,10 @@ class Board(object):
 
     def hit_ship(self, row, column, id):
         value = self.board[row][column]
-        if str(value).startswith(str(id)):
+        if value > 100:
+            if str(value-100).startswith(str(id)):
+                return 0, 0
+        elif str(value).startswith(str(id)):
             return 0, 0
         if value < 99:
             value += 100 # Adds 10 to the field value when it has been hit for the first time
