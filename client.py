@@ -245,7 +245,7 @@ def server_bcasts_callback(ch, method, properties, body):
         else:
             common.clear_screen()
             common.print_board(player_ships_board, player_hits_board)
-            print('You have lost, sorry!')
+            print('You have lost, sorry. Winner is {winner}!').format(winner=msg[2])
 
 class RpcClient(object):
     def __init__(self):

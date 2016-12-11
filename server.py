@@ -396,7 +396,7 @@ if __name__ == '__main__':
         winner = filter(lambda x: not x.get_lost(), game.players)
         logging.debug("Winner is {winner}!".format(winner=winner[0].get_name()))
         cv.acquire()
-        queue.put(common.marshal(common.CTRL_GAME_FINISHED, winner[0].get_id()))
+        queue.put(common.marshal(common.CTRL_GAME_FINISHED, winner[0].get_id(), winner[0].get_name()))
         cv.notify_all()
         cv.release()
 
