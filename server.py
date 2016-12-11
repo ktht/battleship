@@ -282,7 +282,7 @@ if __name__ == '__main__':
     thread_server_announcements = threading.Thread(target = send_announcements, name = 'Server_announcements')
     thread_server_broadcast     = threading.Thread(target = send_broadcasts,    name = 'Server_broadcasts')
     thread_client_watchdog      = threading.Thread(target = client_watchdog,    name = 'Client_watchdog')
-    threads = [thread_game_session, thread_server_announcements, thread_server_broadcast]
+    threads = [thread_game_session, thread_server_announcements, thread_server_broadcast, thread_client_watchdog]
     for t in threads:
         t.setDaemon(True)
         t.start()
