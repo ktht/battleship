@@ -13,7 +13,7 @@ cv = threading.Condition()
 cv_init = threading.Condition()
 start_t = 0
 server_list_timeout = 6
-client_name = ''
+client_id = -1
 
 # Game-specific variables ----------------------------------------
 available_servers  = []
@@ -125,7 +125,7 @@ def listen_server_bcasts():
 def send_keepalive():
     i = 0
     global global_bool
-    global client_name
+    global client_id
     global GAME_SERVER_NAME
 
     client_keepalive_ch.exchange_declare(
@@ -137,7 +137,7 @@ def send_keepalive():
     while not global_bool:
         i += 1
         time.sleep(5)
-        msg = '{client_name}'.format(client_name = client_name)
+        msg = '{client_id}'.format(client_id = client_id)
         client_keepalive_ch.basic_publish(
             exchange    = 'keepalive',
             routing_key = '{server_name}_watchdog'.format(server_name = GAME_SERVER_NAME),
@@ -330,8 +330,8 @@ def authenticate():
             boolean = True
             common.clear_screen()
 
-    global client_name
-    client_name = u_name
+    global client_id
+    client_id = player_id
 
     keepalive_thread = threading.Thread(
         target = send_keepalive,

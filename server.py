@@ -2,7 +2,7 @@ import time, pika, threading, game, common, Queue, logging, sys
 from db import db
 
 # Global constants ------------------------------------------------------------
-SERVER_NAME = 'Server3'
+SERVER_NAME = 'Server'
 board = []
 
 # Synchronization primitives --------------------------------------------------
@@ -15,6 +15,9 @@ stop_loop              = False
 queue = Queue.Queue()
 cv = threading.Condition()
 l_adduser = threading.Lock()
+start_t = 0
+client_watchdog_timeout = 10
+inactive_clients = []
 
 # Indirect communication channels ---------------------------------------------
 announc_con = pika.BlockingConnection(
@@ -146,11 +149,37 @@ def client_watchdog():
         no_ack = True,
     )
 
+    global start_t
+    start_t = time.time()
     watchdog_ch.start_consuming()
 
 def watchdog_callback(ch, method, properties, body):
-    active_clients.add(body)
+    # we expect client ID aka an integer here
+    active_clients.add(int(body))
     logging.debug('Received watchdog message')
+
+    global start_t
+    global inactive_clients
+
+    if time.time() - start_t > client_watchdog_timeout:
+        start_t = time.time()
+        # let's check how many clients are actually active
+        #inactive_clients = [x for x in game.players if x.get_id() not in active_clients]
+
+        active_client_ids = [x for x in active_clients]
+        inactive_client_ids = list(set([x.get_id() for x in game.players]) - set(active_client_ids))
+        inactive_clients = [x for x in game.players if x.get_id() in inactive_client_ids]
+
+        #print 'game player IDs', [x.get_id() for x in game.players]
+        #print 'active client IDs', active_client_ids
+        #print 'inactive client IDs', inactive_client_ids
+
+        if len(inactive_clients) > 0:
+            logging.debug('{nof_players} player(s) have left the game: {player_list}'.format(
+                nof_players = len(inactive_clients),
+                player_list = ', '.join([x.get_name() for x in inactive_clients]),
+            ))
+        #TODO: do something with the list of inactive players
 
 @common.synchronized_g(l_adduser)
 def request_new_id(u_name, pwd):
@@ -224,12 +253,13 @@ def on_request(ch, method, props, body):
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
         board_array = board.get_board()  # Array needed to send board to client
         board_shape = board_array.shape
-        string_array = board_array.tostring()
         #time.sleep(0.2)
+        board_str = board_array.tostring()
+        #time.sleep(0.1)
         #print(board_array)
         #print(board_shape)
         #print(props.reply_to)
-        response = common.marshal(board_array.tostring(), board_shape[0], board_shape[1])
+        response = common.marshal(board_str, board_shape[0], board_shape[1])
     elif CTRL_CODE == common.CTRL_HIT_SHIP:
         global entered_correct_coords, stop_loop, player_has_hit
         entered_correct_coords = False
