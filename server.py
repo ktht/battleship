@@ -47,9 +47,21 @@ rpc_con = pika.BlockingConnection(
         ),
     )
 )
-announc_ch = announc_con.channel()
-bcast_ch   = bcast_con.channel()
-rpc_ch     = rpc_con.channel()
+watchdog_con = pika.BlockingConnection(
+    pika.ConnectionParameters(
+        host = common.host,
+        port = common.port,
+        credentials = pika.PlainCredentials(
+            username = common.mquser,
+            password = common.mqpwd,
+        ),
+    )
+)
+
+announc_ch  = announc_con.channel()
+bcast_ch    = bcast_con.channel()
+rpc_ch      = rpc_con.channel()
+watchdog_ch = watchdog_con.channel()
 
 bcast_ch.exchange_declare(
     exchange = SERVER_NAME,
@@ -61,6 +73,27 @@ announc_ch.exchange_declare(
     arguments = { 'x-message-ttl' : 5000 }
 )
 rpc_ch.queue_declare(queue = 'rpc_queue')
+
+class TimedSet(set):
+    '''Set class with timed autoremoving of elements
+    Code taken from: http://stackoverflow.com/a/16137224
+
+    Needed for maintaining available server list
+    '''
+    def __init__(self):
+        self.__table = {}
+
+    def add(self, item, timeout = 7):
+        self.__table[item] = time.time() + timeout
+        set.add(self, item)
+
+    def __contains__(self, item):
+        return time.time() < self.__table.get(item)
+
+    def __iter__(self):
+        for item in set.__iter__(self):
+            if time.time() < self.__table.get(item):
+                yield item
 
 def send_announcements():
     i = 0
@@ -93,6 +126,31 @@ def send_broadcasts():
             routing_key = '',
             body        = msg
         )
+
+def client_watchdog():
+    watchdog_ch.exchange_declare(
+        exchange = 'keepalive',
+        type     = 'direct',
+    )
+    result     = watchdog_ch.queue_declare(exclusive = True)
+    queue_name = result.method.queue
+
+    watchdog_ch.queue_bind(
+        exchange    = 'keepalive',
+        queue       = queue_name,
+        routing_key = '{server_name}_watchdog'.format(server_name = SERVER_NAME),
+    )
+    watchdog_ch.basic_consume(
+        watchdog_callback,
+        queue  = queue_name,
+        no_ack = True,
+    )
+
+    watchdog_ch.start_consuming()
+
+def watchdog_callback(ch, method, properties, body):
+    active_clients.add(body)
+    logging.debug('Received watchdog message')
 
 @common.synchronized_g(l_adduser)
 def request_new_id(u_name, pwd):
@@ -213,6 +271,8 @@ if __name__ == '__main__':
         stream = sys.stdout
     )
 
+    active_clients = TimedSet()
+
     db_instance = db(common.DATABASE_FILE_NAME)
     game = game.BattleShips()
 
@@ -221,6 +281,7 @@ if __name__ == '__main__':
     thread_game_session         = threading.Thread(target = game_session,       name = 'Game_session_RPC')
     thread_server_announcements = threading.Thread(target = send_announcements, name = 'Server_announcements')
     thread_server_broadcast     = threading.Thread(target = send_broadcasts,    name = 'Server_broadcasts')
+    thread_client_watchdog      = threading.Thread(target = client_watchdog,    name = 'Client_watchdog')
     threads = [thread_game_session, thread_server_announcements, thread_server_broadcast]
     for t in threads:
         t.setDaemon(True)

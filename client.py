@@ -143,7 +143,8 @@ def send_keepalive():
             routing_key = '{server_name}_watchdog'.format(server_name = GAME_SERVER_NAME),
             body        = msg,
         )
-        logging.debug('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
+        #logging.debug('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
+        print('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
 
 def public_announc_callback(ch, method, properties, body):
     t_set.add(body)
