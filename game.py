@@ -1,5 +1,6 @@
 import itertools, random, threading, common, logging
 from string import ascii_uppercase
+from collections import defaultdict
 import numpy as np
 
 
@@ -25,6 +26,7 @@ ships = {
 class BattleShips(object):
 
     def __init__(self):
+        self.ships_l = {'5': 5, '4': 4, '3': 3, '2': 2, '6': 3}
         self.players = []
         self.cv_create_player = threading.Condition()
 
@@ -42,7 +44,7 @@ class BattleShips(object):
 
     def create_and_populate_board(self):
         global BOARD_HEIGHT, BOARD_WIDTH
-        BOARD_HEIGHT = int(np.rint(np.sqrt(40*len(self.players))))
+        BOARD_HEIGHT = int(np.rint(np.sqrt(30*len(self.players))))
         BOARD_WIDTH = BOARD_HEIGHT + 1
         board =  Board(NO_SHIPS_MARK)
         for player in self.players:
@@ -50,8 +52,11 @@ class BattleShips(object):
                 board.bool = False
                 while not board.bool:
                     board.ship_placement(ships[ship], player.id)
+        for index, x in np.ndenumerate(board.get_board()):
+            if int(x) != 0:
+                pl_id = str(x)[0]
+                self.players[int(pl_id)-1].ships_dict[str(x)[1:]].append(index)
         return board
-
 
     def user_exists(self, name):
         return any(map(lambda x: x.get_name() == name, self.players))
@@ -73,8 +78,8 @@ class Player(object):
         self.name = name
         self.id = Player.newid()+1 # Gives incremental new ID to every new player
         self.is_admin_b = True if self.id == 1 else False
-        #self.board_ships = Board(NO_SHIPS_MARK) # Board holding players personal ship locations
-        #self.board_myhits = Board(NO_SHIPS_MARK) # Board showing the hits made to other players
+        self.ships_dict = defaultdict(list) # Dictionary storing coordinates of every ship the player has
+        self.ships_dmg = defaultdict(list) # Dict storing all the dmg player has got
 
     def is_admin(self):
         return self.is_admin_b
@@ -153,6 +158,9 @@ class Board(object):
 
     def get_board(self):
         return self.board
+
+    def get_value(self, x, y):
+        return self.board[x][y]
 
 class Score(object):
     pass

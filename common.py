@@ -22,6 +22,7 @@ CTRL_SIGNAL_PL_TURN = int(50)
 CTRL_HIT_TIMEOUT    = int(70)
 CTRL_ERR_HIT        = int(80)
 CTRL_NOTIFY_HIT     = int(90)
+CTRL_SHIP_SUNKEN    = int(95)
 DATABASE_FILE_NAME  = "users.db"
 
 def clear_screen():

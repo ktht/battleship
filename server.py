@@ -242,6 +242,15 @@ def inform_other_clients(x, y, sufferer_id, bomber_id):
     cv.notify_all()
     cv.release()
 
+def inform_sunken_ship(pl_id, ship_id):
+    for index in game.players[int(pl_id)-1].ships_dict[str(ship_id)]:
+        cv.acquire()
+        queue.put(common.marshal(common.CTRL_SHIP_SUNKEN, index[0], index[1], pl_id))
+        cv.notify_all()
+        cv.release()
+        print(index[0])
+        print(index[1])
+
 def on_request(ch, method, props, body):
     request = common.unmarshal(body)
     CTRL_CODE = int(request[0])
@@ -255,10 +264,6 @@ def on_request(ch, method, props, body):
         board_shape = board_array.shape
         #time.sleep(0.2)
         board_str = board_array.tostring()
-        #time.sleep(0.1)
-        #print(board_array)
-        #print(board_shape)
-        #print(props.reply_to)
         response = common.marshal(board_str, board_shape[0], board_shape[1])
     elif CTRL_CODE == common.CTRL_HIT_SHIP:
         global entered_correct_coords, stop_loop, player_has_hit
@@ -268,6 +273,14 @@ def on_request(ch, method, props, body):
             stop_loop = True
         else:
             try:
+                value = board.get_value(int(request[2]), int(request[3]))
+                if value < 100 and value != 0:
+                    pl_id = str(value)[0]
+                    ship_id = str(value)[1]
+                    game.players[int(pl_id)-1].ships_dmg[ship_id].append(1)
+                    if len(game.players[int(pl_id)-1].ships_dmg[ship_id]) == game.ships_l[ship_id]:
+                        inform_sunken_ship(pl_id, ship_id)
+                        #print('Aww, sunken it is!')
                 response, suffer_id = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
                 entered_correct_coords = True
                 if int(response) == 1: # In case someone got hit, let him know

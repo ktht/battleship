@@ -235,6 +235,11 @@ def server_bcasts_callback(ch, method, properties, body):
                 common.clear_screen()
                 common.print_board(player_ships_board, player_hits_board)
                 print('Oh noes, you\'ve been hit by {bomber}!'.format(bomber=str(msg[4])))
+    elif CTRL_CODE == common.CTRL_SHIP_SUNKEN:
+        if int(msg[3]) != player_id:
+            player_hits_board[int(msg[1])][int(msg[2])] = 'X'
+            common.clear_screen()
+            common.print_board(player_ships_board, player_hits_board)
 
     else:
         cv.acquire()
