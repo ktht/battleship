@@ -221,6 +221,16 @@ def request_new_id(u_name, pwd):
     else:
         return common.CTRL_ERR_DB # Username is taken or entered password is wrong
 
+def check_win():
+    counter = 0
+    for key, value in board.score.iteritems():
+        if int(value) == game.ships_tot:
+            counter += 1
+            game.players[int(key)-1].set_lost()
+        if counter == len(game.players)-1:
+            global game_not_finished
+            game_not_finished = False
+
 def start_game(player_id):
     for player in game.players:
         if int(player.get_id()) == int(player_id) and player.is_admin():
@@ -272,18 +282,20 @@ def on_request(ch, method, props, body):
         else:
             try:
                 value = board.get_value(int(request[2]), int(request[3]))
-                if value < 100 and value != 0:
-                    pl_id = str(value)[0]
-                    ship_id = str(value)[1]
-                    game.players[int(pl_id)-1].ships_dmg[ship_id].append(1)
-                    if len(game.players[int(pl_id)-1].ships_dmg[ship_id]) == game.ships_l[ship_id]:
-                        inform_sunken_ship(pl_id, ship_id)
-                        #print('Aww, sunken it is!')
+                if int(value) < 100 and int(value) > 0:
+                    if int(str(value)[0]) != int(request[1]):
+                        pl_id = str(value)[0]
+                        ship_id = str(value)[1]
+                        game.players[int(pl_id) - 1].ships_dmg[ship_id] += 1
+                        if int(game.players[int(pl_id) - 1].ships_dmg[ship_id]) == int(game.ships_l[ship_id]):
+                            inform_sunken_ship(pl_id, ship_id)
                 response, suffer_id = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
                 entered_correct_coords = True
+                check_win()
                 if int(response) == 1: # In case someone got hit, let him know
                     inform_other_clients(request[2], request[3], suffer_id, request[1])
-            except Exception:
+            except Exception as err:
+                logging.info(err)
                 response = common.CTRL_ERR_HIT
             player_has_hit = True
 
@@ -362,19 +374,32 @@ if __name__ == '__main__':
     try:
         while game_not_finished:
             for player in game.players:
-                entered_correct_coords = False
-                while not entered_correct_coords:
-                    stop_loop = False
-                    cv.acquire()
-                    queue.put(common.marshal(common.CTRL_SIGNAL_PL_TURN, player.get_id()))
-                    cv.notify_all()
-                    cv.release()
-                    start = time.time()
-                    while not player_has_hit and time.time()-start<30 and not stop_loop:
-                        time.sleep(0.5)
-                        if time.time()-start>30:
-                            entered_correct_coords = True
-                    player_has_hit = False
-                    stop_loop = False
+                if player.get_lost() == False:
+                    entered_correct_coords = False
+                    while not entered_correct_coords:
+                        stop_loop = False
+                        cv.acquire()
+                        queue.put(common.marshal(common.CTRL_SIGNAL_PL_TURN, player.get_id()))
+                        cv.notify_all()
+                        cv.release()
+                        start = time.time()
+                        while not player_has_hit and time.time()-start<30 and not stop_loop:
+                            time.sleep(0.5)
+                            if time.time()-start>30:
+                                entered_correct_coords = True
+                        player_has_hit = False
+                        stop_loop = False
     except KeyboardInterrupt:
         is_running = False
+
+    if is_running:
+        winner = filter(lambda x: not x.get_lost(), game.players)
+        logging.debug("Winner is {winner}!".format(winner=winner[0].get_name()))
+        cv.acquire()
+        queue.put(common.marshal(common.CTRL_GAME_FINISHED, winner[0].get_id()))
+        cv.notify_all()
+        cv.release()
+
+    while is_running: # Stops server from stopping after game is finished
+        time.sleep(0.5)
+

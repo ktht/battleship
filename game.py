@@ -27,6 +27,7 @@ class BattleShips(object):
 
     def __init__(self):
         self.ships_l = {'5': 5, '4': 4, '3': 3, '2': 2, '6': 3}
+        self.ships_tot = 17
         self.players = []
         self.cv_create_player = threading.Condition()
 
@@ -79,7 +80,8 @@ class Player(object):
         self.id = Player.newid()+1 # Gives incremental new ID to every new player
         self.is_admin_b = True if self.id == 1 else False
         self.ships_dict = defaultdict(list) # Dictionary storing coordinates of every ship the player has
-        self.ships_dmg = defaultdict(list) # Dict storing all the dmg player has got
+        self.ships_dmg = defaultdict(int) # Dict storing all the dmg player has got
+        self.has_lost = False
 
     def is_admin(self):
         return self.is_admin_b
@@ -93,17 +95,17 @@ class Player(object):
     def get_name(self):
         return self.name
 
+    def set_lost(self):
+        self.has_lost = True
+
+    def get_lost(self):
+        return self.has_lost
+
 class Board(object):
     def __init__(self, mark):
         self.bool = False
         self.board = self.create_board(mark, BOARD_WIDTH, BOARD_HEIGHT)
-        self.score = {
-            CARRIER_MARK    : 0,
-            BATTLESHIP_MARK : 0,
-            CRUISER_MARK    : 0,
-            SUBMARINE_MARK  : 0,
-            DESTROYER_MARK  : 0
-        }
+        self.score = defaultdict(int)
 
     def create_board(self, mark, w, h):
         if type(mark) is str:
@@ -152,7 +154,9 @@ class Board(object):
         elif str(value).startswith(str(id)):
             return 0, 0
         if value < 99:
-            value += 100 # Adds 10 to the field value when it has been hit for the first time
+            if value != 0:
+                self.score[str(value)[0]] += 1
+            value += 100 # Adds 100 to the field value when it has been hit for the first time
             self.board[row][column] = value
         if value-100 == 0:
             return 0, 0

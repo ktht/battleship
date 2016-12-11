@@ -1,4 +1,4 @@
-import pika, logging, uuid, threading, time, Queue, common, getpass, sys, select, string,  numpy as np
+import pika, logging, uuid, threading, time, common, getpass, sys, select, string,  numpy as np
 
 # Global constants -----------------------------------------------
 GAME_SERVER_NAME = 'Server'
@@ -8,7 +8,6 @@ global_bool = False
 os_linux = True
 initialization_phase = True
 is_alive = True
-queue = Queue.Queue()
 cv = threading.Condition()
 cv_init = threading.Condition()
 start_t = 0
@@ -194,9 +193,7 @@ def get_coords():
         i, o, e = select.select([sys.stdin], [], [], 25)
         if (i):
             coords =  sys.stdin.readline().strip()
-        else: coords = None
-    if coords == None:
-        return common.CTRL_HIT_TIMEOUT, common.CTRL_HIT_TIMEOUT
+        else: return common.CTRL_HIT_TIMEOUT, common.CTRL_HIT_TIMEOUT
     try:
         x = int(string.lowercase.index(coords[0].lower()))
         y = int(str(coords)[1:])-1
@@ -236,16 +233,19 @@ def server_bcasts_callback(ch, method, properties, body):
                 common.print_board(player_ships_board, player_hits_board)
                 print('Oh noes, you\'ve been hit by {bomber}!'.format(bomber=str(msg[4])))
     elif CTRL_CODE == common.CTRL_SHIP_SUNKEN:
-        if int(msg[3]) != player_id:
+        if int(msg[3]) != player_id: # If this clients ship did not sink
             player_hits_board[int(msg[1])][int(msg[2])] = 'S'
             common.clear_screen()
             common.print_board(player_ships_board, player_hits_board)
-
-    else:
-        cv.acquire()
-        queue.put(body)
-        cv.notify_all()
-        cv.release()
+    elif CTRL_CODE == common.CTRL_GAME_FINISHED:
+        if player_id == int(msg[1]): # If client has winner id
+            common.clear_screen()
+            common.print_board(player_ships_board, player_hits_board)
+            print('Good job, you have won!')
+        else:
+            common.clear_screen()
+            common.print_board(player_ships_board, player_hits_board)
+            print('You have lost, sorry!')
 
 class RpcClient(object):
     def __init__(self):
@@ -318,8 +318,8 @@ def authenticate():
     while not boolean:
         try:
             u_name = raw_input("Enter your username: ")
-            #pwd    = getpass.getpass("Enter your password: ")
-            pwd = raw_input("Enter your password: ")
+            pwd    = getpass.getpass("Enter your password: ")
+            #pwd = raw_input("Enter your password: ")
             #player_id = int(rpc_client.call(common.marshal(common.CTRL_REQ_ID, u_name,pwd)))
         except KeyboardInterrupt:
             print("Bye bye")
@@ -398,7 +398,6 @@ if __name__ == '__main__':
             game_not_started = True
             while game_not_started:
                 if common.query_yes_no("Do you want to start the game?"):
-                    #rpc_client.call(common.marshal(common.CTRL_START_GAME, player_id))
                     rpc_client.call_mum(common.CTRL_START_GAME, player_id)
                     game_not_started = False
     except KeyboardInterrupt:
