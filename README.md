@@ -150,7 +150,7 @@ F  |  .   .   .   .   .   .   .   .   *       F  |  X   -   -   -   -   -   X   
 G  |  .   *   *   *   .   .   .   .   *       G  |  -   O   O   O   -   -   -   -   -  
 H  |  .   .   .   .   .   .   .   .   *       H  |  -   -   -   -   -   -   -   -   O  
 
-You have lost, sorry. <winnerusername> is user!
+You have lost, sorry. winner is <winnerusername>!
 ```
 
 Example output on the winners screen. On the right, all of the ships have been sinked.
