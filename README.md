@@ -2,6 +2,10 @@
 
 The game has only one Python's 3rd party module as its dependency -- `pika` -- which is responsible for the middleware, and which uses RabbitMQ broker behind the scenes. Thus, it's imperative to install RabbitMQ server to your machine as well if you want to run the program on a local machine. But this is not necessary as the RabbitMQ broker must not reside on the local machine; instead, some websites (e.g. https://www.cloudamqp.com/) provides services in which the RabbitMQ broker is available over the Internet, assuming appropriate credentials. Since we do not want to publish our credentials (as these can be abused to overload the RabbitMQ server), we use `localhost` hostname and `guest` username as the default. The game provider/gamer is free to modify these connection parameters in `common.py`.
 
+The game should be run in terminal. Some functions (e.g. getpass) may not work properly when using some IDE.
+
+Server is started by the following command:
+$ python server.py -s <servername>
 ...
 
 # User manual explaining the user interface and how to play the game
@@ -111,7 +115,7 @@ There are six types of marks on the fields:
 | \-        |      opponents' unbombed fields       |
 | 0         |     no hit on opponents' fields       |
 | X         |       a hit on opponents' fields      |
-| S         |   sunked ship on opponents' fields    |
+| S         |   sinked ship on opponents' fields    |
 | \*        |          bombed own ship              |
 | number    | own ship (number tells the ship type) |
 
@@ -128,8 +132,37 @@ F  |  .   .   .   .   5   .   .   .   .       F  |  -   -   -   -   -   -   -   
 G  |  .   .   .   .   .   .   .   .   .       G  |  -   -   -   -   -   -   -   -   -  
 H  |  .   .   .   .   .   .   3   3   3       H  |  -   -   -   -   -   -   -   -   -
 ```
-Note that the only ambiguity here is that the user doesn't know whose ship has he/she bombed or sunked; the user whose ship has been bombed or sunked does know, who did it.
+Note that the only ambiguity here is that the user doesn't know whose ship has he/she bombed or sinked; the user whose ship has been bombed or sinked does know, who did it.
 
 **8.** Playing 'til there's a winner.
 
-TBD.
+Example output of the player who lost.
+```
+      1   2   3   4   5   6   7   8   9             1   2   3   4   5   6   7   8   9  
+   ------------------------------------          ------------------------------------
+A  |  .   .   *   *   .   *   *   *   .       A  |  -   O   -   -  O   O   O   O   -  
+B  |  .   .   *   *   .   .   .   .   .       B  |  -   -   O   O   -   -   -   -   -  
+C  |  .   .   *   .   .   .   .   .   .       C  |  -   -   O   -   -   -   -   -   O  
+D  |  .   .   *   .   .   .   .   .   *       D  |  -   -   -   O   -   -   -   -   O  
+E  |  .   .   .   .   .   .   .   .   *       E  |  X   O   -   X   -   -   X   -   -  
+F  |  .   .   .   .   .   .   .   .   *       F  |  X   -   -   -   -   -   X   -   -  
+G  |  .   *   *   *   .   .   .   .   *       G  |  -   O   O   O   -   -   -   -   -  
+H  |  .   .   .   .   .   .   .   .   *       H  |  -   -   -   -   -   -   -   -   O  
+
+You have lost, sorry. <winnerusername> is user!
+```
+
+Example output on the winners screen. On the right, all of the ships have been sinked.
+```
+      1   2   3   4   5   6   7   8   9             1   2   3   4   5   6   7   8   9  
+   ------------------------------------          ------------------------------------
+A  |  .   .   .   .   .   .   .   .   .       A  |  O   -   S   S   O   S   S   S   -  
+B  |  .   .   .   .   .   6   .   .   .       B  |  -   -   S   S   -   -   -   -   -  
+C  |  .   .   .   .   .   6   .   .   .       C  |  -   -   S   -   -   -   -   -   O  
+D  |  5   .   .   .   .   6   .   .   .       D  |  -   -   S   O   -   -   -   -   S  
+E  |  *   .   .   *   4   4   *   .   .       E  |  -   -   -   -   -   -   -   -   S  
+F  |  *   .   .   .   3   3   *   .   .       F  |  -   -   -   -   -   -   -   -   S  
+G  |  5   .   .   .   .   .   .   .   .       G  |  -   S   S   S   -   -   -   -   S  
+H  |  5   .   .   .   2   2   .   .   .       H  |  -   -   -   -   -   -   -   -   S  
+Good job, you have won!
+```

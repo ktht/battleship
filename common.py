@@ -9,7 +9,7 @@ vhost = None
 
 hb_interval = 0 # Disables connection timeout, change to None for default Pika heartbeat interval
 
-# Glboal constants ----------------------------------
+# Global constants ----------------------------------
 CTRL_REQ_ID         = int(55)
 CTRL_REQ_BOARD      = int(56)
 CTRL_START_GAME     = int(57)

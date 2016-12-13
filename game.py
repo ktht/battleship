@@ -153,7 +153,9 @@ class Board(object):
 
     def ship_placement(self, ship, id):
         ''' Used for placing the ships on the board
-        It check if ship would go out of boundaries or if multiple ships would overlap
+
+        It also checks if ship would go out of boundaries or if multiple ships would overlap
+
         :param ship: list containing ship id and size
         :param id: Id of the player whose ship is being placed
         '''

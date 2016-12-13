@@ -26,7 +26,7 @@ server_list_con = pika.BlockingConnection(
         virtual_host = common.vhost,
         host = common.host,
         port = common.port,
-        heartbeat_interval=common.hb_inverval,
+        heartbeat_interval=common.hb_interval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -38,7 +38,7 @@ server_bcasts_con = pika.BlockingConnection(
         virtual_host = common.vhost,
         host = common.host,
         port = common.port,
-        heartbeat_interval=common.hb_inverval,
+        heartbeat_interval=common.hb_interval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -50,7 +50,7 @@ client_keepalive_con = pika.BlockingConnection(
         virtual_host = common.vhost,
         host = common.host,
         port = common.port,
-        heartbeat_interval=common.hb_inverval,
+        heartbeat_interval=common.hb_interval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -83,6 +83,7 @@ class TimedSet(set):
                 yield (item, self.__table.get(item)[0])
 
 def listen_public_announcements():
+    ''' Listens to information of different servers to create a list of available servers. '''
     server_list_ch.exchange_declare(
         exchange = 'announcements',
         type     = 'fanout'
@@ -108,6 +109,7 @@ def listen_public_announcements():
     server_list_ch.start_consuming()
 
 def listen_server_bcasts():
+    ''' After connecting to a selected server, gets game updates from the server. '''
     server_bcasts_ch.exchange_declare(
         exchange = GAME_SERVER_NAME,
         type     = 'fanout'
@@ -128,6 +130,7 @@ def listen_server_bcasts():
     server_bcasts_ch.start_consuming()
 
 def send_keepalive():
+    ''' Sends keepalive messages to the server. '''
     i = 0
     global global_bool
     global client_id
@@ -136,7 +139,7 @@ def send_keepalive():
     client_keepalive_ch.exchange_declare(
         exchange  = 'keepalive',
         type      = 'direct',
-        arguments = { 'x-message-ttl': 5000 }
+        arguments = { 'x-message-ttl': 5000 } # Timeout for messages
     )
 
     while not global_bool:
@@ -152,6 +155,12 @@ def send_keepalive():
         #print('Sent {keepalive_i}th keepalive message'.format(keepalive_i = i))
 
 def public_announc_callback(ch, method, properties, body):
+    ''' Callback for server announcements, creates a list of available servers
+    :param ch:
+    :param method:
+    :param properties:
+    :param body: Server announcement message
+    '''
     t_set.add(body)
 
     global start_t
@@ -185,6 +194,14 @@ def public_announc_callback(ch, method, properties, body):
                 server_list_con.close()
 
 def process_board(board, height, width):
+    ''' After requesting the game board from the server, this function is used to scrap
+    information of other players ships from the board.
+
+    :param board: Board string array (done using numpy tostring)
+    :param height: Board height
+    :param width: Board width
+    :return: Processed board
+    '''
     game_board = np.fromstring(board, dtype=int).reshape(height, width)
     game_board = game_board.astype(str)
     for index, x in np.ndenumerate(game_board):
@@ -194,6 +211,14 @@ def process_board(board, height, width):
     return game_board
 
 def get_coords():
+    ''' Used for asking from the player, which coordinates to bomb
+
+    Has a timeout of 25 seconds, which is achieved with select module
+    Only works on Unix
+    http://stackoverflow.com/questions/10842428/
+
+    :return: x and y coordinates
+    '''
     if os_linux:
         print "Enter the coords you want to hit! (ex a2) You have 25 seconds!:"
         i, o, e = select.select([sys.stdin], [], [], 25)
@@ -209,6 +234,14 @@ def get_coords():
 
 
 def server_bcasts_callback(ch, method, properties, body):
+    ''' Callback after receiving updates/commands from the game server. If needed, responds to the server
+    by making a rpc call.
+
+    :param ch:
+    :param method:
+    :param properties:
+    :param body: Message received from the server
+    '''
     msg = common.unmarshal(body)
     CTRL_CODE = int(msg[0])
     if CTRL_CODE == common.CTRL_BRDCAST_MSG:
@@ -219,10 +252,11 @@ def server_bcasts_callback(ch, method, properties, body):
         player_ships_board = process_board(board[0], int(board[1]) ,int(board[2]))
         player_hits_board = np.full((int(board[1]), int(board[2])), '-', dtype=str)
         common.print_board(player_ships_board, player_hits_board)
-    elif CTRL_CODE == common.CTRL_SIGNAL_PL_TURN:
-        if int(msg[1]) == player_id:
+    elif CTRL_CODE == common.CTRL_SIGNAL_PL_TURN: # After server signals this players turn, he gets
+        if int(msg[1]) == player_id: # a prompt asking for coordinates to bomb, with a 25 sec timeout
             x, y = get_coords()
-            if x != common.CTRL_HIT_TIMEOUT and y != common.CTRL_HIT_TIMEOUT: # In case of timeout not worth doing RPC
+            # In case of timeout not worth doing RPC
+            if x != common.CTRL_HIT_TIMEOUT and y != common.CTRL_HIT_TIMEOUT:
                 hit = int(rpc_client.call_mum(common.CTRL_HIT_SHIP, player_id, x, y)[0])
                 if int(hit) == common.CTRL_ERR_HIT:
                     print('Entered coordinates were invalid.')
@@ -233,7 +267,7 @@ def server_bcasts_callback(ch, method, properties, body):
             common.clear_screen()
             common.print_board(player_ships_board, player_hits_board)
     elif CTRL_CODE == common.CTRL_NOTIFY_HIT:
-        if int(msg[1]) == player_id: # Id of player who got hit
+        if int(msg[1]) == player_id: # If this player got hit
                 player_ships_board[int(msg[2])][int(msg[3])] = '*'
                 common.clear_screen()
                 common.print_board(player_ships_board, player_hits_board)
@@ -244,23 +278,26 @@ def server_bcasts_callback(ch, method, properties, body):
             common.clear_screen()
             common.print_board(player_ships_board, player_hits_board)
     elif CTRL_CODE == common.CTRL_GAME_FINISHED:
-        if player_id == int(msg[1]): # If client has winner id
-            common.clear_screen()
-            common.print_board(player_ships_board, player_hits_board)
+        common.clear_screen()
+        common.print_board(player_ships_board, player_hits_board)
+        if player_id == int(msg[1]): # If players id matches the winners id
             print('Good job, you have won!')
         else:
-            common.clear_screen()
-            common.print_board(player_ships_board, player_hits_board)
             print('You have lost, sorry. Winner is {winner}!').format(winner=msg[2])
 
 class RpcClient(object):
+    ''' Class for making rpc calls from the server
+    Taken from https://www.rabbitmq.com/tutorials/tutorial-six-python.html
+
+    Uses correlation id to filter out irrelevant responses
+    '''
     def __init__(self):
         self.rpc_con = pika.BlockingConnection(
             pika.ConnectionParameters(
                 virtual_host=common.vhost,
                 host = common.host,
                 port = common.port,
-                heartbeat_interval=common.hb_inverval,
+                heartbeat_interval=common.hb_interval,
                 credentials = pika.PlainCredentials(
                     username = common.mquser,
                     password = common.mqpwd,
@@ -302,6 +339,9 @@ class RpcClient(object):
         return self.call(*args)
 
 def choose_server():
+    ''' After available server list has been created, asks player which server to join
+    Also checks if player entered server name correctly.
+    '''
     global available_servers, GAME_SERVER_NAME
     boolean = True
     while boolean:
@@ -321,6 +361,13 @@ def choose_server():
     common.clear_screen()
 
 def authenticate():
+    ''' After player has joined a server, asks for player credentials
+
+    Checks the database for other players with the same username and if entered password is correct.
+    When client connects for the first, his entered credentials will be saved to a database.
+
+    :return: username, player id
+    '''
     boolean = False
     print('Connected to {game_server_name}'.format(game_server_name = GAME_SERVER_NAME))
     while not boolean:
@@ -401,20 +448,19 @@ if __name__ == '__main__':
     u_name, player_id = authenticate() # Get u_name, id, using rpc
     print('Hello, {username}! You have connected succesfully!'.format(username = u_name))
 
-
     listen_server_bcasts_th.start()
 
-    if player_id == common.CTRL_GAME_STARTED: # Entering "spectator mode"
+    if player_id == common.CTRL_GAME_STARTED: # Entering "spectator mode" when player connects after game has started
         board = rpc_client.call_mum(common.CTRL_REQ_BOARD)
         player_ships_board = np.fromstring(board[0], dtype=int).reshape(int(board[1]), int(board[2]))
         player_hits_board = np.full((int(board[1]), int(board[2])), '-', dtype=str)
         common.print_board(player_ships_board, player_hits_board)
     else:
         try:
-            if (int(rpc_client.call_mum(common.CTRL_CHECK_ADMIN, player_id)[0])) == 1:  # If True
+            if (int(rpc_client.call_mum(common.CTRL_CHECK_ADMIN, player_id)[0])) == 1:  # If player is admin
                 is_admin = True
                 game_not_started = True
-                while game_not_started:
+                while game_not_started: # Only admin has the right to start a new game
                     if common.query_yes_no("Do you want to start the game?"):
                         rpc_client.call_mum(common.CTRL_START_GAME, player_id)
                         game_not_started = False

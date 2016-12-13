@@ -1,8 +1,11 @@
 import time, pika, threading, game, common, Queue, logging, sys
 from db import db
+from argparse import ArgumentParser
 
 # Global constants ------------------------------------------------------------
-SERVER_NAME = 'Server'
+___DEFAULT_SERVER_NAME = 'Server'
+___NAME = 'Battheships Game Server'
+___VER = '0.0.0.1'
 start_t = 0
 client_watchdog_timeout = 10
 is_running             = True
@@ -17,6 +20,20 @@ queue = Queue.Queue()
 cv = threading.Condition()
 l_adduser = threading.Lock()
 
+# Private methods -------------------------------------------------------------
+def __info():
+    return '%s version %s' % (___NAME, ___VER)
+
+# Parsing arguments -----------------------------------------------------------
+parser = ArgumentParser(description=__info(),
+                        version=___VER)
+parser.add_argument('-s', '--serv', type=str, \
+                    help='Server name, ' \
+                         'defaults to %s' % ___DEFAULT_SERVER_NAME, \
+                    default=___DEFAULT_SERVER_NAME)
+args = parser.parse_args()
+SERVER_NAME = (args.serv)
+
 # Game-specific variables -----------------------------------------------------
 board = []
 inactive_clients = []
@@ -27,7 +44,7 @@ announc_con = pika.BlockingConnection(
         virtual_host = common.vhost,
         host = common.host,
         port = common.port,
-        heartbeat_interval=common.hb_inverval,
+        heartbeat_interval=common.hb_interval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -39,7 +56,7 @@ bcast_con = pika.BlockingConnection(
         virtual_host = common.vhost,
         host = common.host,
         port = common.port,
-        heartbeat_interval=common.hb_inverval,
+        heartbeat_interval=common.hb_interval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -51,7 +68,7 @@ rpc_con = pika.BlockingConnection(
         virtual_host = common.vhost,
         host = common.host,
         port = common.port,
-        heartbeat_interval=common.hb_inverval,
+        heartbeat_interval=common.hb_interval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -63,7 +80,7 @@ watchdog_con = pika.BlockingConnection(
         virtual_host = common.vhost,
         host = common.host,
         port = common.port,
-        heartbeat_interval=common.hb_inverval,
+        heartbeat_interval=common.hb_interval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -253,7 +270,7 @@ def check_win():
 def start_game(player_id):
     ''' Creates the battleship game board and notifies all players to request
      newly created board.
-    :param player_id: if of the player trying to start the game
+    :param player_id: id of the player trying to start the game
     :return: OK if player is admin
              NOT_ADMIN if player is not admin
     '''
@@ -275,7 +292,7 @@ def inform_other_clients(x, y, sufferer_id, bomber_id):
     :param x: x-coordinate of the hit
     :param y: y-coordinate of the hit
     :param sufferer_id: id of the player who got hit
-    :param bomber_id: if if the player who made the hit
+    :param bomber_id: id of the player who made the hit
     '''
     bomber_name = game.players[int(bomber_id)-1].get_name()
     cv.acquire()
@@ -285,7 +302,7 @@ def inform_other_clients(x, y, sufferer_id, bomber_id):
 
 def inform_sunken_ship(pl_id, ship_id):
     '''Informs other players when a ship has been sunken
-    :param pl_id: if of the player whose ship got sunken
+    :param pl_id: id of the player whose ship got sunken
     :param ship_id: id of the ships that has been sunken
     '''
     for index in game.players[int(pl_id)-1].ships_dict[str(ship_id)]:
@@ -367,7 +384,7 @@ def game_session():
 
 if __name__ == '__main__':
     logging.basicConfig(
-        level  = logging.CRITICAL,
+        level  = logging.DEBUG,
         format = '[%(asctime)s] [%(threadName)s] [%(module)s:%(funcName)s:%(lineno)d] [%(levelname)s] -- %(message)s',
         stream = sys.stdout
     )
