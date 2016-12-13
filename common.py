@@ -5,6 +5,9 @@ host = 'localhost'
 port = 5672
 mquser = 'guest'
 mqpwd  = 'guest'
+vhost = None
+
+hb_interval = 0 # Disables connection timeout, change to None for default Pika heartbeat interval
 
 # Glboal constants ----------------------------------
 CTRL_REQ_ID         = int(55)
@@ -17,6 +20,7 @@ CTRL_ALL_PLAYERS    = int(61)
 CTRL_NOT_ADMIN      = int(62)
 CTRL_ERR_LOGGED_IN  = int(63)
 CTRL_GAME_FINISHED  = int(64)
+CTRL_GAME_STARTED   = int(65)
 CTRL_OK             = int(40)
 CTRL_BRDCAST_MSG    = int(30)
 CTRL_SIGNAL_PL_TURN = int(50)
@@ -24,6 +28,7 @@ CTRL_HIT_TIMEOUT    = int(70)
 CTRL_ERR_HIT        = int(80)
 CTRL_NOTIFY_HIT     = int(90)
 CTRL_SHIP_SUNKEN    = int(95)
+CTRL_CHECK_ADMIN    = int(98)
 DATABASE_FILE_NAME  = "users.db"
 
 def clear_screen():

@@ -3,27 +3,31 @@ from db import db
 
 # Global constants ------------------------------------------------------------
 SERVER_NAME = 'Server'
-board = []
-
-# Synchronization primitives --------------------------------------------------
+start_t = 0
+client_watchdog_timeout = 10
 is_running             = True
 game_not_started       = True
 game_not_finished      = True
 player_has_hit         = False
 entered_correct_coords = False
 stop_loop              = False
+
+# Synchronization primitives --------------------------------------------------
 queue = Queue.Queue()
 cv = threading.Condition()
 l_adduser = threading.Lock()
-start_t = 0
-client_watchdog_timeout = 10
+
+# Game-specific variables -----------------------------------------------------
+board = []
 inactive_clients = []
 
 # Indirect communication channels ---------------------------------------------
 announc_con = pika.BlockingConnection(
     pika.ConnectionParameters(
+        virtual_host = common.vhost,
         host = common.host,
         port = common.port,
+        heartbeat_interval=common.hb_inverval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -32,8 +36,10 @@ announc_con = pika.BlockingConnection(
 )
 bcast_con = pika.BlockingConnection(
     pika.ConnectionParameters(
+        virtual_host = common.vhost,
         host = common.host,
         port = common.port,
+        heartbeat_interval=common.hb_inverval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -42,8 +48,10 @@ bcast_con = pika.BlockingConnection(
 )
 rpc_con = pika.BlockingConnection(
     pika.ConnectionParameters(
+        virtual_host = common.vhost,
         host = common.host,
         port = common.port,
+        heartbeat_interval=common.hb_inverval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -52,8 +60,10 @@ rpc_con = pika.BlockingConnection(
 )
 watchdog_con = pika.BlockingConnection(
     pika.ConnectionParameters(
+        virtual_host = common.vhost,
         host = common.host,
         port = common.port,
+        heartbeat_interval=common.hb_inverval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -81,7 +91,7 @@ class TimedSet(set):
     '''Set class with timed autoremoving of elements
     Code taken from: http://stackoverflow.com/a/16137224
 
-    Needed for maintaining available server list
+    Needed for maintaining available clients list
     '''
     def __init__(self):
         self.__table = {}
@@ -99,6 +109,7 @@ class TimedSet(set):
                 yield item
 
 def send_announcements():
+    ''' Sends server information to "announcements" exchange for players to see. '''
     i = 0
     while is_running:
         i +=1
@@ -115,6 +126,7 @@ def send_announcements():
         logging.debug('Sent {announce_it}th announcement'.format(announce_it = i))
 
 def send_broadcasts():
+    ''' Broadcasts game info to all subscribed players. '''
     while is_running:
         cv.acquire()
         if queue.qsize() == 0:
@@ -131,6 +143,7 @@ def send_broadcasts():
         )
 
 def client_watchdog():
+    ''' Receives keepalive messages from players. '''
     watchdog_ch.exchange_declare(
         exchange = 'keepalive',
         type     = 'direct',
@@ -213,25 +226,37 @@ def request_new_id(u_name, pwd):
 
     # i.e. if authentication was succesful or a new user was added
     if valid_user:
+        global game_not_started
         player_id, retcode = game.create_player(u_name)
         logging.debug("A new player '%s' was added to the game" % u_name)
         if retcode == common.CTRL_OK:
+            if not game_not_started: # When game has already started
+                game.players[int(player_id) - 1].set_lost()
+                return common.CTRL_GAME_STARTED
             return player_id
 
     else:
         return common.CTRL_ERR_DB # Username is taken or entered password is wrong
 
 def check_win():
+    ''' Checks if any player has lost and if there is final a winner '''
     counter = 0
     for key, value in board.score.iteritems():
         if int(value) == game.ships_tot:
             counter += 1
-            game.players[int(key)-1].set_lost()
+            if not game.players[int(key)-1].get_lost():
+                game.players[int(key)-1].set_lost()
         if counter == len(game.players)-1:
             global game_not_finished
             game_not_finished = False
 
 def start_game(player_id):
+    ''' Creates the battleship game board and notifies all players to request
+     newly created board.
+    :param player_id: if of the player trying to start the game
+    :return: OK if player is admin
+             NOT_ADMIN if player is not admin
+    '''
     for player in game.players:
         if int(player.get_id()) == int(player_id) and player.is_admin():
             global board
@@ -246,6 +271,12 @@ def start_game(player_id):
     return common.CTRL_NOT_ADMIN
 
 def inform_other_clients(x, y, sufferer_id, bomber_id):
+    ''' Sends info of the hit to other players with the name of bomber
+    :param x: x-coordinate of the hit
+    :param y: y-coordinate of the hit
+    :param sufferer_id: id of the player who got hit
+    :param bomber_id: if if the player who made the hit
+    '''
     bomber_name = game.players[int(bomber_id)-1].get_name()
     cv.acquire()
     queue.put(common.marshal(common.CTRL_NOTIFY_HIT, sufferer_id, x, y, bomber_name))
@@ -253,6 +284,10 @@ def inform_other_clients(x, y, sufferer_id, bomber_id):
     cv.release()
 
 def inform_sunken_ship(pl_id, ship_id):
+    '''Informs other players when a ship has been sunken
+    :param pl_id: if of the player whose ship got sunken
+    :param ship_id: id of the ships that has been sunken
+    '''
     for index in game.players[int(pl_id)-1].ships_dict[str(ship_id)]:
         cv.acquire()
         queue.put(common.marshal(common.CTRL_SHIP_SUNKEN, index[0], index[1], pl_id))
@@ -260,15 +295,25 @@ def inform_sunken_ship(pl_id, ship_id):
         cv.release()
 
 def on_request(ch, method, props, body):
+    ''' Responds to rpc calls, (receives requests from players and responds to them)
+    :param ch:
+    :param method:
+    :param props:
+    :param body: body of the rpc call that a player has made
+    '''
     request = common.unmarshal(body)
     CTRL_CODE = int(request[0])
 
     if CTRL_CODE == common.CTRL_REQ_ID:
         response = request_new_id(request[1], request[2])
+    elif CTRL_CODE == common.CTRL_CHECK_ADMIN:
+        if game.players[int(request[1])-1].is_admin():
+            response = 1
+        else: response = 0
     elif CTRL_CODE == common.CTRL_START_GAME:
         response = start_game(request[1])
     elif CTRL_CODE == common.CTRL_REQ_BOARD:
-        board_array = board.get_board()  # Array needed to send board to client
+        board_array = board.get_board()  # Array needed to send board to a client
         board_shape = board_array.shape
         #time.sleep(0.2)
         board_str = board_array.tostring()
@@ -282,11 +327,12 @@ def on_request(ch, method, props, body):
         else:
             try:
                 value = board.get_value(int(request[2]), int(request[3]))
-                if int(value) < 100 and int(value) > 0:
-                    if int(str(value)[0]) != int(request[1]):
-                        pl_id = str(value)[0]
-                        ship_id = str(value)[1]
-                        game.players[int(pl_id) - 1].ships_dmg[ship_id] += 1
+                if int(value) < 100 and int(value) > 0:  # If that coordinate has not been hit before
+                    pl_id = str(value)[0]
+                    ship_id = str(value)[1]
+                    if int(pl_id) != int(request[1]):  # If player did not hit his own ship
+                        game.players[int(pl_id) - 1].ships_dmg[ship_id] += 1  # Records the hit
+                        # If ship sunk
                         if int(game.players[int(pl_id) - 1].ships_dmg[ship_id]) == int(game.ships_l[ship_id]):
                             inform_sunken_ship(pl_id, ship_id)
                 response, suffer_id = board.hit_ship(int(request[2]), int(request[3]), int(request[1]))
@@ -309,6 +355,7 @@ def on_request(ch, method, props, body):
 
 
 def game_session():
+    ''' Starts consuming rpc calls from all players. '''
     rpc_ch.basic_qos(prefetch_count = 1)
     rpc_ch.basic_consume(on_request, queue = '{server_name}_rpc_queue'.format(server_name=SERVER_NAME))
     try:
@@ -320,7 +367,7 @@ def game_session():
 
 if __name__ == '__main__':
     logging.basicConfig(
-        level  = logging.DEBUG,
+        level  = logging.CRITICAL,
         format = '[%(asctime)s] [%(threadName)s] [%(module)s:%(funcName)s:%(lineno)d] [%(levelname)s] -- %(message)s',
         stream = sys.stdout
     )
@@ -343,7 +390,8 @@ if __name__ == '__main__':
         logging.debug("Started thread '%s'" % t.getName())
 
     try:
-        while game_not_started:
+        while game_not_started: # Sends game info (n.o players connected and admin username to all who
+            # are connected to the server.
             logging.debug("Entered loop")
             game.cv_create_player.acquire()
             if game.get_nof_players() == 0: # Not worth sending it, when no clients are connected
@@ -366,13 +414,17 @@ if __name__ == '__main__':
             cv.notify_all()
             cv.release()
     except KeyboardInterrupt:
+        bcast_con.close()
+        announc_con.close()
+        rpc_con.close()
+        watchdog_con.close()
         is_running = False
         game_not_finished = False
         logging.debug("Bye bye")
     logging.debug("Exiting initial loop")
 
     try:
-        while game_not_finished:
+        while game_not_finished: # Main game loop, where players are given turns to play
             for player in game.players:
                 if player.get_lost() == False:
                     entered_correct_coords = False
@@ -391,15 +443,19 @@ if __name__ == '__main__':
                         stop_loop = False
     except KeyboardInterrupt:
         is_running = False
+        bcast_con.close()
+        announc_con.close()
+        rpc_con.close()
+        watchdog_con.close()
 
     if is_running:
-        winner = filter(lambda x: not x.get_lost(), game.players)
+        winner = game.get_winner()
         logging.debug("Winner is {winner}!".format(winner=winner[0].get_name()))
         cv.acquire()
         queue.put(common.marshal(common.CTRL_GAME_FINISHED, winner[0].get_id(), winner[0].get_name()))
         cv.notify_all()
         cv.release()
 
-    while is_running: # Stops server from stopping after game is finished
+    while is_running: # Keeps server running after game is finished
         time.sleep(0.5)
 

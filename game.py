@@ -24,14 +24,24 @@ ships = {
 }
 
 class BattleShips(object):
+    '''Battleships game manager
+
+    Used for creating and later accessing player objects and the game board.
+    '''
 
     def __init__(self):
+        '''Initializes Battleships game instance'''
         self.ships_l = {'5': 5, '4': 4, '3': 3, '2': 2, '6': 3}
         self.ships_tot = 17
         self.players = []
         self.cv_create_player = threading.Condition()
 
     def create_player(self, name):
+        ''' Creates a player object
+        :param name: name of the player object
+        :return: Player_Id, OK  - if succeeded
+                 -1, ERR_MAX_PL - if max number of player has been reached
+        '''
         if len(self.players) < 10:
             self.cv_create_player.acquire()
             self.new_player = Player(name)
@@ -44,6 +54,12 @@ class BattleShips(object):
         return self.new_player.get_id(), common.CTRL_OK
 
     def create_and_populate_board(self):
+        ''' Creates a new board object and populates it with every player ships
+
+        Also creates a dict for every player, containing coordinates of players ships
+
+        :return: populated board object
+        '''
         global BOARD_HEIGHT, BOARD_WIDTH
         BOARD_HEIGHT = int(np.rint(np.sqrt(30*len(self.players))))
         BOARD_WIDTH = BOARD_HEIGHT + 1
@@ -53,10 +69,10 @@ class BattleShips(object):
                 board.bool = False
                 while not board.bool:
                     board.ship_placement(ships[ship], player.id)
-        for index, x in np.ndenumerate(board.get_board()):
-            if int(x) != 0:
-                pl_id = str(x)[0]
-                self.players[int(pl_id)-1].ships_dict[str(x)[1:]].append(index)
+        for coord, board_val in np.ndenumerate(board.get_board()):
+            if int(board_val) != 0: # If on those coords there is a ship
+                pl_id = str(board_val)[0]
+                self.players[int(pl_id)-1].ships_dict[str(board_val)[1:]].append(coord)
         return board
 
     def user_exists(self, name):
@@ -73,7 +89,11 @@ class BattleShips(object):
             logging.error("Multiple admins")
         return ''
 
+    def get_winner(self):
+        return filter(lambda x: not x.get_lost(), self.players)
+
 class Player(object):
+    ''' Class containing players information '''
     newid = itertools.count().next
     def __init__(self, name):
         self.name = name
@@ -102,12 +122,23 @@ class Player(object):
         return self.has_lost
 
 class Board(object):
+    ''' Game board manager
+
+    Used for creating, populating and later modifying the game board
+    Board is created using numpy.
+    '''
     def __init__(self, mark):
-        self.bool = False
+        self.bool = False # Boolean helping to populate the board with ships
         self.board = self.create_board(mark, BOARD_WIDTH, BOARD_HEIGHT)
         self.score = defaultdict(int)
 
     def create_board(self, mark, w, h):
+        ''' Creates numpy array for the game board
+        :param mark: character to be used for filling the board
+        :param w: board width
+        :param h: board height
+        :return: board array
+        '''
         if type(mark) is str:
             board = np.full((h, w), mark, dtype=str)
         else:
@@ -121,6 +152,11 @@ class Board(object):
             print '%-3s|  %s' % (row_label, ' '.join('%-3s' % i for i in row))
 
     def ship_placement(self, ship, id):
+        ''' Used for placing the ships on the board
+        It check if ship would go out of boundaries or if multiple ships would overlap
+        :param ship: list containing ship id and size
+        :param id: Id of the player whose ship is being placed
+        '''
         v_or_h = random.randint(0,1)
         row = random.randint(1, BOARD_HEIGHT)
         column = random.randint(1, BOARD_WIDTH)
@@ -133,7 +169,7 @@ class Board(object):
                 self.board[:, column - 1][row - 1:(row + ship[0] - 1)] = ship[1]+10*id
                 self.bool = True
             else:
-                return False
+                return
         else:
             sublist = self.board[row-1][column-1:(column+ship[0]-1)]
             if not all(v == 0 for v in sublist): # Checks overlap with other ships
@@ -147,6 +183,18 @@ class Board(object):
 
 
     def hit_ship(self, row, column, id):
+        ''' Used for making hits to the ships on the board
+
+        This function also checks if player would hit his own ship.
+        After a coordinate has been hit, 100 is added to its value, so same hit would not be
+        counted twice.
+
+        :param row: row index of the hit
+        :param column: column index of the hit
+        :param id: Id of the player who made the hit
+        :return: 0, 0         -- when hit was a miss or hit players own ship
+                 1, player_id -- 1 and Id of the player who got hit
+        '''
         value = self.board[row][column]
         if value > 100:
             if str(value-100).startswith(str(id)):
@@ -169,8 +217,6 @@ class Board(object):
     def get_value(self, x, y):
         return self.board[x][y]
 
-class Score(object):
-    pass
 
 if __name__ == '__main__':
     game = BattleShips()

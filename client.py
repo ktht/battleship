@@ -2,17 +2,18 @@ import pika, logging, uuid, threading, time, common, getpass, sys, select, strin
 
 # Global constants -----------------------------------------------
 GAME_SERVER_NAME = 'Server'
-
-# Synchronization primitives -------------------------------------
+is_admin = False
 global_bool = False
 os_linux = True
 initialization_phase = True
 is_alive = True
-cv = threading.Condition()
-cv_init = threading.Condition()
 start_t = 0
 server_list_timeout = 6
 client_id = -1
+
+# Synchronization primitives -------------------------------------
+cv = threading.Condition()
+cv_init = threading.Condition()
 
 # Game-specific variables ----------------------------------------
 available_servers  = []
@@ -22,8 +23,10 @@ player_hits_board = []
 # Indirect communication channels --------------------------------
 server_list_con = pika.BlockingConnection(
     pika.ConnectionParameters(
+        virtual_host = common.vhost,
         host = common.host,
         port = common.port,
+        heartbeat_interval=common.hb_inverval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -32,8 +35,10 @@ server_list_con = pika.BlockingConnection(
 )
 server_bcasts_con = pika.BlockingConnection(
     pika.ConnectionParameters(
+        virtual_host = common.vhost,
         host = common.host,
         port = common.port,
+        heartbeat_interval=common.hb_inverval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -42,8 +47,10 @@ server_bcasts_con = pika.BlockingConnection(
 )
 client_keepalive_con = pika.BlockingConnection(
     pika.ConnectionParameters(
+        virtual_host = common.vhost,
         host = common.host,
         port = common.port,
+        heartbeat_interval=common.hb_inverval,
         credentials = pika.PlainCredentials(
             username = common.mquser,
             password = common.mqpwd,
@@ -53,7 +60,6 @@ client_keepalive_con = pika.BlockingConnection(
 server_list_ch      = server_list_con.channel()
 server_bcasts_ch    = server_bcasts_con.channel()
 client_keepalive_ch = client_keepalive_con.channel()
-
 class TimedSet(set):
     '''Set class with timed autoremoving of elements
     Code taken from: http://stackoverflow.com/a/16137224
@@ -251,8 +257,10 @@ class RpcClient(object):
     def __init__(self):
         self.rpc_con = pika.BlockingConnection(
             pika.ConnectionParameters(
+                virtual_host=common.vhost,
                 host = common.host,
                 port = common.port,
+                heartbeat_interval=common.hb_inverval,
                 credentials = pika.PlainCredentials(
                     username = common.mquser,
                     password = common.mqpwd,
@@ -381,6 +389,9 @@ if __name__ == '__main__':
             else:
                 break
     except KeyboardInterrupt:
+        server_list_con.close()
+        server_bcasts_con.close()
+        client_keepalive_con.close()
         print "Bye bye"
         sys.exit(1)
     cv_init.release()
@@ -393,18 +404,28 @@ if __name__ == '__main__':
 
     listen_server_bcasts_th.start()
 
-    try:
-        if player_id == 1:  # Admin has player id 1
-            game_not_started = True
-            while game_not_started:
-                if common.query_yes_no("Do you want to start the game?"):
-                    rpc_client.call_mum(common.CTRL_START_GAME, player_id)
-                    game_not_started = False
-    except KeyboardInterrupt:
-        print("Bye bye")
-        sys.exit(1)
+    if player_id == common.CTRL_GAME_STARTED: # Entering "spectator mode"
+        board = rpc_client.call_mum(common.CTRL_REQ_BOARD)
+        player_ships_board = np.fromstring(board[0], dtype=int).reshape(int(board[1]), int(board[2]))
+        player_hits_board = np.full((int(board[1]), int(board[2])), '-', dtype=str)
+        common.print_board(player_ships_board, player_hits_board)
+    else:
+        try:
+            if (int(rpc_client.call_mum(common.CTRL_CHECK_ADMIN, player_id)[0])) == 1:  # If True
+                is_admin = True
+                game_not_started = True
+                while game_not_started:
+                    if common.query_yes_no("Do you want to start the game?"):
+                        rpc_client.call_mum(common.CTRL_START_GAME, player_id)
+                        game_not_started = False
+        except KeyboardInterrupt:
+            server_list_con.close()
+            server_bcasts_con.close()
+            client_keepalive_con.close()
+            print("Bye bye")
+            sys.exit(1)
 
-    while not global_bool:
+    while not global_bool: # Keeps main thread alive
         time.sleep(0.2)
 
     listen_server_bcasts_th.join()
