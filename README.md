@@ -5,6 +5,7 @@ The game has only one Python's 3rd party module as its dependency -- `pika` -- w
 The game should be run in terminal. Some functions (e.g. getpass) may not work properly when using some IDE.
 
 Server is started by the following command:
+
 $ python server.py -s <servername>
 ...
 
