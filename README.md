@@ -10,6 +10,24 @@ Server is started by the following command:
 $ python server.py -s <servername>
 ```
 
+# Setting up the server and client to use CloudAMQP
+In the  common.py file there are the following *Connection parameters:*
+>host = 'localhost'
+
+>port = 5672
+
+>mquser = 'guest'
+
+>mqpwd  = 'guest'
+
+>vhost = None
+
+After creating a [CloudAMQP](https://www.cloudamqp.com/) broker, the URL received from their site is in the form:
+
+`amqp://mquser:mqpwd@host/vhost`
+
+Port number is the same for `localhost` and CloudAMQP.
+
 # User manual explaining the user interface and how to play the game
 
 **1.** The user starts the client program with
