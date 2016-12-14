@@ -1,6 +1,7 @@
 # User manual explaining setup process: Client, Server, Middleware
 
-The game has only one Python's 3rd party module as its dependency -- `pika` -- which is responsible for the middleware, and which uses RabbitMQ broker behind the scenes. Thus, it's imperative to install RabbitMQ server to your machine as well if you want to run the program on a local machine. But this is not necessary as the RabbitMQ broker must not reside on the local machine; instead, some websites (e.g. https://www.cloudamqp.com/) provides services in which the RabbitMQ broker is available over the Internet, assuming appropriate credentials. Since we do not want to publish our credentials (as these can be abused to overload the RabbitMQ server), we use `localhost` hostname and `guest` username as the default. The game provider/gamer is free to modify these connection parameters in `common.py`.
+The game has only one Python's 3rd party module as its dependency -- `pika` -- which is responsible for the middleware, and which uses RabbitMQ broker behind the scenes. Thus, it's imperative to install RabbitMQ server to your machine as well if you want to run the program on a local machine. But this is not necessary as the RabbitMQ broker must not reside on the local machine; instead, some websites (e.g. https://www.cloudamqp.com/) provide services in which the RabbitMQ broker is available over the Internet, assuming appropriate credentials. Since we do not want to publish our credentials (as these can be abused to overload the RabbitMQ server), we use `localhost` hostname and `guest` username as the default. The game provider/gamer is free to modify these connection parameters in `common.py`.
+Also a note that currently, because of [select](https://docs.python.org/2/library/select.html) module, the client program works only on Unix systems.
 
 The game should be run in terminal. Some functions (e.g. getpass) may not work properly when using some IDE.
 
@@ -150,7 +151,7 @@ F  |  .   .   .   .   .   .   .   .   *       F  |  X   -   -   -   -   -   X   
 G  |  .   *   *   *   .   .   .   .   *       G  |  -   O   O   O   -   -   -   -   -  
 H  |  .   .   .   .   .   .   .   .   *       H  |  -   -   -   -   -   -   -   -   O  
 
-You have lost, sorry. winner is <winnerusername>!
+You have lost, sorry. Winner is <winnerusername>!
 ```
 
 Example output on the winners screen. On the right, all of the ships have been sinked.
